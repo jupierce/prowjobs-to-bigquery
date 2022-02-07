@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import List
 import re
 
-# ci-operator.logs files are read by multiple processes
+# ci-operator.log files are read by multiple processes
 # they need individual connections to the cloud storage client
 # https://stackoverflow.com/questions/10117073/how-to-use-initializer-to-set-up-my-multiprocess-pool
 process_sc = None
