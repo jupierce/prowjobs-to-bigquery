@@ -1,0 +1,403 @@
+{
+	"kind": "ProwJob",
+	"apiVersion": "prow.k8s.io/v1",
+	"metadata": {
+		"name": "4.11.0-0.nightly-2022-05-20-153751-aws-serial-1",
+		"namespace": "ci",
+		"uid": "e84455cb-88fd-41b2-aa20-36c6a0d62e4b",
+		"resourceVersion": "2011435103",
+		"generation": 5,
+		"creationTimestamp": "2022-05-20T18:51:44Z",
+		"labels": {
+			"created-by-prow": "true",
+			"prow.k8s.io/build-id": "1527723766476443648",
+			"prow.k8s.io/context": "",
+			"prow.k8s.io/id": "4.11.0-0.nightly-2022-05-20-153751-aws-serial-1",
+			"prow.k8s.io/job": "periodic-ci-openshift-release-master-nightly-4.11-e2e-aws-seria",
+			"prow.k8s.io/refs.base_ref": "master",
+			"prow.k8s.io/refs.org": "openshift",
+			"prow.k8s.io/refs.repo": "release",
+			"prow.k8s.io/type": "periodic",
+			"release.openshift.io/verify": "true"
+		},
+		"annotations": {
+			"prow.k8s.io/context": "",
+			"prow.k8s.io/job": "periodic-ci-openshift-release-master-nightly-4.11-e2e-aws-serial",
+			"release.openshift.io/architecture": "amd64",
+			"release.openshift.io/source": "ocp/4.11-art-latest",
+			"release.openshift.io/tag": "4.11.0-0.nightly-2022-05-20-153751"
+		},
+		"managedFields": [
+			{
+				"manager": "release-controller",
+				"operation": "Update",
+				"apiVersion": "prow.k8s.io/v1",
+				"time": "2022-05-20T18:51:44Z",
+				"fieldsType": "FieldsV1",
+				"fieldsV1": {
+					"f:metadata": {
+						"f:annotations": {
+							".": {},
+							"f:prow.k8s.io/context": {},
+							"f:prow.k8s.io/job": {},
+							"f:release.openshift.io/architecture": {},
+							"f:release.openshift.io/source": {},
+							"f:release.openshift.io/tag": {}
+						},
+						"f:labels": {
+							".": {},
+							"f:created-by-prow": {},
+							"f:prow.k8s.io/context": {},
+							"f:prow.k8s.io/job": {},
+							"f:prow.k8s.io/refs.base_ref": {},
+							"f:prow.k8s.io/refs.org": {},
+							"f:prow.k8s.io/refs.repo": {},
+							"f:prow.k8s.io/type": {},
+							"f:release.openshift.io/verify": {}
+						}
+					},
+					"f:spec": {
+						".": {},
+						"f:agent": {},
+						"f:cluster": {},
+						"f:decoration_config": {
+							".": {},
+							"f:censor_secrets": {},
+							"f:gcs_configuration": {
+								".": {},
+								"f:bucket": {},
+								"f:default_org": {},
+								"f:default_repo": {},
+								"f:mediaTypes": {
+									".": {},
+									"f:log": {}
+								},
+								"f:path_strategy": {}
+							},
+							"f:gcs_credentials_secret": {},
+							"f:grace_period": {},
+							"f:resources": {
+								".": {},
+								"f:clonerefs": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								},
+								"f:initupload": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								},
+								"f:place_entrypoint": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								},
+								"f:sidecar": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								}
+							},
+							"f:skip_cloning": {},
+							"f:timeout": {},
+							"f:utility_images": {
+								".": {},
+								"f:clonerefs": {},
+								"f:entrypoint": {},
+								"f:initupload": {},
+								"f:sidecar": {}
+							}
+						},
+						"f:extra_refs": {},
+						"f:job": {},
+						"f:namespace": {},
+						"f:pod_spec": {
+							".": {},
+							"f:containers": {},
+							"f:serviceAccountName": {},
+							"f:volumes": {}
+						},
+						"f:prowjob_defaults": {
+							".": {},
+							"f:tenant_id": {}
+						},
+						"f:report": {},
+						"f:type": {}
+					},
+					"f:status": {
+						".": {},
+						"f:startTime": {}
+					}
+				}
+			},
+			{
+				"manager": "crier",
+				"operation": "Update",
+				"apiVersion": "prow.k8s.io/v1",
+				"time": "2022-05-20T18:51:45Z",
+				"fieldsType": "FieldsV1",
+				"fieldsV1": {
+					"f:status": {
+						"f:prev_report_states": {
+							".": {},
+							"f:gcsk8sreporter": {},
+							"f:gcsreporter": {}
+						}
+					}
+				}
+			},
+			{
+				"manager": "prow-controller-manager",
+				"operation": "Update",
+				"apiVersion": "prow.k8s.io/v1",
+				"time": "2022-05-20T21:39:27Z",
+				"fieldsType": "FieldsV1",
+				"fieldsV1": {
+					"f:metadata": {
+						"f:labels": {
+							"f:prow.k8s.io/build-id": {},
+							"f:prow.k8s.io/id": {}
+						}
+					},
+					"f:status": {
+						"f:build_id": {},
+						"f:completionTime": {},
+						"f:description": {},
+						"f:pendingTime": {},
+						"f:pod_name": {},
+						"f:state": {},
+						"f:url": {}
+					}
+				}
+			}
+		]
+	},
+	"spec": {
+		"type": "periodic",
+		"agent": "kubernetes",
+		"cluster": "build01",
+		"namespace": "ci",
+		"job": "periodic-ci-openshift-release-master-nightly-4.11-e2e-aws-serial",
+		"extra_refs": [
+			{
+				"org": "openshift",
+				"repo": "release",
+				"base_ref": "master"
+			}
+		],
+		"report": true,
+		"pod_spec": {
+			"volumes": [
+				{
+					"name": "boskos",
+					"secret": {
+						"secretName": "boskos-credentials",
+						"items": [
+							{
+								"key": "credentials",
+								"path": "credentials"
+							}
+						]
+					}
+				},
+				{
+					"name": "ci-pull-credentials",
+					"secret": {
+						"secretName": "ci-pull-credentials"
+					}
+				},
+				{
+					"name": "cluster-profile",
+					"secret": {
+						"secretName": "cluster-secrets-aws-2"
+					}
+				},
+				{
+					"name": "pull-secret",
+					"secret": {
+						"secretName": "registry-pull-credentials"
+					}
+				},
+				{
+					"name": "result-aggregator",
+					"secret": {
+						"secretName": "result-aggregator"
+					}
+				}
+			],
+			"containers": [
+				{
+					"name": "",
+					"image": "ci-operator:latest",
+					"command": [
+						"ci-operator"
+					],
+					"args": [
+						"--gcs-upload-secret=/secrets/gcs/service-account.json",
+						"--image-import-pull-secret=/etc/pull-secret/.dockerconfigjson",
+						"--lease-server-credentials-file=/etc/boskos/credentials",
+						"--report-credentials-file=/etc/report/credentials",
+						"--secret-dir=/secrets/ci-pull-credentials",
+						"--secret-dir=/usr/local/e2e-aws-serial-cluster-profile",
+						"--target=e2e-aws-serial",
+						"--variant=nightly-4.11"
+					],
+					"env": [
+						{
+							"name": "RELEASE_IMAGE_LATEST",
+							"value": "registry.ci.openshift.org/ocp/release:4.11.0-0.nightly-2022-05-20-153751"
+						},
+						{
+							"name": "RELEASE_IMAGE_INITIAL",
+							"value": "registry.ci.openshift.org/ocp/release:4.11.0-0.nightly-2022-05-20-153751"
+						}
+					],
+					"resources": {
+						"requests": {
+							"cpu": "10m"
+						}
+					},
+					"volumeMounts": [
+						{
+							"name": "boskos",
+							"readOnly": true,
+							"mountPath": "/etc/boskos"
+						},
+						{
+							"name": "ci-pull-credentials",
+							"readOnly": true,
+							"mountPath": "/secrets/ci-pull-credentials"
+						},
+						{
+							"name": "cluster-profile",
+							"mountPath": "/usr/local/e2e-aws-serial-cluster-profile"
+						},
+						{
+							"name": "gcs-credentials",
+							"readOnly": true,
+							"mountPath": "/secrets/gcs"
+						},
+						{
+							"name": "pull-secret",
+							"readOnly": true,
+							"mountPath": "/etc/pull-secret"
+						},
+						{
+							"name": "result-aggregator",
+							"readOnly": true,
+							"mountPath": "/etc/report"
+						}
+					],
+					"imagePullPolicy": "Always"
+				}
+			],
+			"serviceAccountName": "ci-operator"
+		},
+		"decoration_config": {
+			"timeout": "4h0m0s",
+			"grace_period": "1h0m0s",
+			"utility_images": {
+				"clonerefs": "gcr.io/k8s-prow/clonerefs:v20220519-c750e0df24",
+				"initupload": "gcr.io/k8s-prow/initupload:v20220519-c750e0df24",
+				"entrypoint": "gcr.io/k8s-prow/entrypoint:v20220519-c750e0df24",
+				"sidecar": "gcr.io/k8s-prow/sidecar:v20220519-c750e0df24"
+			},
+			"resources": {
+				"clonerefs": {
+					"limits": {
+						"memory": "3Gi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "500Mi"
+					}
+				},
+				"initupload": {
+					"limits": {
+						"memory": "200Mi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "50Mi"
+					}
+				},
+				"place_entrypoint": {
+					"limits": {
+						"memory": "100Mi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "25Mi"
+					}
+				},
+				"sidecar": {
+					"limits": {
+						"memory": "2Gi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "250Mi"
+					}
+				}
+			},
+			"gcs_configuration": {
+				"bucket": "origin-ci-test",
+				"path_strategy": "single",
+				"default_org": "openshift",
+				"default_repo": "origin",
+				"mediaTypes": {
+					"log": "text/plain"
+				}
+			},
+			"gcs_credentials_secret": "gce-sa-credentials-gcs-publisher",
+			"skip_cloning": true,
+			"censor_secrets": true
+		},
+		"prowjob_defaults": {
+			"tenant_id": "GlobalDefaultID"
+		}
+	},
+	"status": {
+		"startTime": "2022-05-20T18:51:44Z",
+		"pendingTime": "2022-05-20T18:51:44Z",
+		"completionTime": "2022-05-20T21:39:27Z",
+		"state": "success",
+		"description": "Job succeeded.",
+		"url": "https://prow.ci.openshift.org/view/gs/origin-ci-test/logs/periodic-ci-openshift-release-master-nightly-4.11-e2e-aws-serial/1527723766476443648",
+		"pod_name": "4.11.0-0.nightly-2022-05-20-153751-aws-serial-1",
+		"build_id": "1527723766476443648",
+		"prev_report_states": {
+			"gcsk8sreporter": "pending",
+			"gcsreporter": "pending"
+		}
+	}
+}

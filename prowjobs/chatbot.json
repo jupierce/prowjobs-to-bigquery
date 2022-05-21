@@ -1,0 +1,460 @@
+{
+	"kind": "ProwJob",
+	"apiVersion": "prow.k8s.io/v1",
+	"metadata": {
+		"name": "chat-bot-2022-05-16-103338.9814",
+		"namespace": "ci",
+		"uid": "7bf5cf2a-64da-453d-9c67-40c3e22f1347",
+		"resourceVersion": "1999543628",
+		"generation": 5,
+		"creationTimestamp": "2022-05-16T10:33:39Z",
+		"labels": {
+			"ci-chat-bot.openshift.io/launch": "true",
+			"prow.k8s.io/build-id": "1526148867370782720",
+			"prow.k8s.io/id": "chat-bot-2022-05-16-103338.9814",
+			"prow.k8s.io/job": "release-openshift-origin-installer-launch-gcp-modern",
+			"prow.k8s.io/type": "periodic",
+			"release.openshift.io/verify": "true"
+		},
+		"annotations": {
+			"ci-chat-bot.openshift.io/buildCluster": "build01",
+			"ci-chat-bot.openshift.io/channel": "D01GYJ7JWJ2",
+			"ci-chat-bot.openshift.io/expires": "13500",
+			"ci-chat-bot.openshift.io/jobInputs": "[{\"Image\":\"registry.ci.openshift.org/ocp/release@sha256:4f516616baed3cf84585e753359f7ef2153ae139c2e80e0191902fbd073c4143\",\"Version\":\"4.10.13\",\"Refs\":null},{\"Image\":\"registry.ci.openshift.org/ocp/release@sha256:ddcb70ce04a01ce487c0f4ad769e9e36a10c8c832a34307c1b1eb8e03a5b7ddb\",\"Version\":\"4.10.15\",\"Refs\":null}]",
+			"ci-chat-bot.openshift.io/jobParams": "test=e2e-upgrade",
+			"ci-chat-bot.openshift.io/mode": "upgrade",
+			"ci-chat-bot.openshift.io/ns": "ci-ln-jmljf8t",
+			"ci-chat-bot.openshift.io/originalMessage": "test upgrade 4.10.13 4.10.15 gcp",
+			"ci-chat-bot.openshift.io/platform": "gcp",
+			"ci-chat-bot.openshift.io/targetType": "steps",
+			"ci-chat-bot.openshift.io/user": "U010FL5U465",
+			"prow.k8s.io/job": "release-openshift-origin-installer-launch-gcp-modern",
+			"release.openshift.io/architecture": "amd64",
+			"release.openshift.io/from-tag": "4.10.13",
+			"release.openshift.io/tag": "4.10.15"
+		},
+		"managedFields": [
+			{
+				"manager": "ci-chat-bot",
+				"operation": "Update",
+				"apiVersion": "prow.k8s.io/v1",
+				"time": "2022-05-16T10:33:39Z",
+				"fieldsType": "FieldsV1",
+				"fieldsV1": {
+					"f:metadata": {
+						"f:annotations": {
+							".": {},
+							"f:ci-chat-bot.openshift.io/buildCluster": {},
+							"f:ci-chat-bot.openshift.io/channel": {},
+							"f:ci-chat-bot.openshift.io/expires": {},
+							"f:ci-chat-bot.openshift.io/jobInputs": {},
+							"f:ci-chat-bot.openshift.io/jobParams": {},
+							"f:ci-chat-bot.openshift.io/mode": {},
+							"f:ci-chat-bot.openshift.io/ns": {},
+							"f:ci-chat-bot.openshift.io/originalMessage": {},
+							"f:ci-chat-bot.openshift.io/platform": {},
+							"f:ci-chat-bot.openshift.io/targetType": {},
+							"f:ci-chat-bot.openshift.io/user": {},
+							"f:prow.k8s.io/job": {},
+							"f:release.openshift.io/architecture": {},
+							"f:release.openshift.io/from-tag": {},
+							"f:release.openshift.io/tag": {}
+						},
+						"f:labels": {
+							".": {},
+							"f:ci-chat-bot.openshift.io/launch": {},
+							"f:prow.k8s.io/job": {},
+							"f:prow.k8s.io/type": {},
+							"f:release.openshift.io/verify": {}
+						}
+					},
+					"f:spec": {
+						".": {},
+						"f:agent": {},
+						"f:cluster": {},
+						"f:decoration_config": {
+							".": {},
+							"f:censor_secrets": {},
+							"f:gcs_configuration": {
+								".": {},
+								"f:bucket": {},
+								"f:default_org": {},
+								"f:default_repo": {},
+								"f:mediaTypes": {
+									".": {},
+									"f:log": {}
+								},
+								"f:path_strategy": {}
+							},
+							"f:gcs_credentials_secret": {},
+							"f:grace_period": {},
+							"f:resources": {
+								".": {},
+								"f:clonerefs": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								},
+								"f:initupload": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								},
+								"f:place_entrypoint": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								},
+								"f:sidecar": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								}
+							},
+							"f:skip_cloning": {},
+							"f:timeout": {},
+							"f:utility_images": {
+								".": {},
+								"f:clonerefs": {},
+								"f:entrypoint": {},
+								"f:initupload": {},
+								"f:sidecar": {}
+							}
+						},
+						"f:job": {},
+						"f:namespace": {},
+						"f:pod_spec": {
+							".": {},
+							"f:containers": {},
+							"f:serviceAccountName": {},
+							"f:volumes": {}
+						},
+						"f:prowjob_defaults": {
+							".": {},
+							"f:tenant_id": {}
+						},
+						"f:report": {},
+						"f:type": {}
+					},
+					"f:status": {
+						".": {},
+						"f:startTime": {}
+					}
+				}
+			},
+			{
+				"manager": "crier",
+				"operation": "Update",
+				"apiVersion": "prow.k8s.io/v1",
+				"time": "2022-05-16T10:33:39Z",
+				"fieldsType": "FieldsV1",
+				"fieldsV1": {
+					"f:status": {
+						"f:prev_report_states": {
+							".": {},
+							"f:gcsk8sreporter": {},
+							"f:gcsreporter": {}
+						}
+					}
+				}
+			},
+			{
+				"manager": "prow-controller-manager",
+				"operation": "Update",
+				"apiVersion": "prow.k8s.io/v1",
+				"time": "2022-05-16T12:27:23Z",
+				"fieldsType": "FieldsV1",
+				"fieldsV1": {
+					"f:metadata": {
+						"f:labels": {
+							"f:prow.k8s.io/build-id": {},
+							"f:prow.k8s.io/id": {}
+						}
+					},
+					"f:status": {
+						"f:build_id": {},
+						"f:completionTime": {},
+						"f:description": {},
+						"f:pendingTime": {},
+						"f:pod_name": {},
+						"f:state": {},
+						"f:url": {}
+					}
+				}
+			}
+		]
+	},
+	"spec": {
+		"type": "periodic",
+		"agent": "kubernetes",
+		"cluster": "build01",
+		"namespace": "ci",
+		"job": "release-openshift-origin-installer-launch-gcp-modern",
+		"report": true,
+		"pod_spec": {
+			"volumes": [
+				{
+					"name": "boskos",
+					"secret": {
+						"secretName": "boskos-credentials",
+						"items": [
+							{
+								"key": "credentials",
+								"path": "credentials"
+							}
+						]
+					}
+				},
+				{
+					"name": "cluster-profile",
+					"projected": {
+						"sources": [
+							{
+								"secret": {
+									"name": "cluster-secrets-gcp"
+								}
+							},
+							{
+								"configMap": {
+									"name": "cluster-profile-gcp"
+								}
+							}
+						]
+					}
+				},
+				{
+					"name": "pull-secret",
+					"secret": {
+						"secretName": "registry-pull-credentials"
+					}
+				},
+				{
+					"name": "push-secret",
+					"secret": {
+						"secretName": "registry-push-credentials-ci-central"
+					}
+				},
+				{
+					"name": "release-pull-secret",
+					"secret": {
+						"secretName": "ci-pull-credentials"
+					}
+				}
+			],
+			"containers": [
+				{
+					"name": "",
+					"image": "ci-operator:latest",
+					"command": [
+						"ci-operator"
+					],
+					"args": [
+						"--give-pr-author-access-to-namespace=true",
+						"--image-import-pull-secret=/etc/pull-secret/.dockerconfigjson",
+						"--image-mirror-push-secret=/etc/push-secret/.dockerconfigjson",
+						"--input-hash=$(BUILD_ID)",
+						"--input-hash=$(JOB_NAME)",
+						"--namespace=$(NAMESPACE)",
+						"--secret-dir=/usr/local/launch-cluster-profile",
+						"--secret-dir=/usr/local/pull-secret",
+						"--target=launch",
+						"--gcs-upload-secret=/secrets/gcs/service-account.json",
+						"--lease-server-credentials-file=/etc/boskos/credentials"
+					],
+					"env": [
+						{
+							"name": "DELETE_AFTER",
+							"value": "12h"
+						},
+						{
+							"name": "PRESERVE_DURATION",
+							"value": "1h"
+						},
+						{
+							"name": "RELEASE_IMAGE_INITIAL",
+							"value": "registry.ci.openshift.org/ocp/release@sha256:4f516616baed3cf84585e753359f7ef2153ae139c2e80e0191902fbd073c4143"
+						},
+						{
+							"name": "RELEASE_IMAGE_LATEST",
+							"value": "registry.ci.openshift.org/ocp/release@sha256:ddcb70ce04a01ce487c0f4ad769e9e36a10c8c832a34307c1b1eb8e03a5b7ddb"
+						},
+						{
+							"name": "CLUSTER_VARIANT",
+							"value": "test"
+						},
+						{
+							"name": "CLUSTER_DURATION",
+							"value": "10800"
+						},
+						{
+							"name": "BRANCH",
+							"value": "4.10"
+						},
+						{
+							"name": "CLUSTER_TYPE",
+							"value": "gcp"
+						},
+						{
+							"name": "UNRESOLVED_CONFIG",
+							"value": "{\n  \"zz_generated_metadata\": {\n    \"org\": \"\",\n    \"repo\": \"\",\n    \"branch\": \"\"\n  },\n  \"releases\": {\n    \"initial\": {\n      \"integration\": {\n        \"namespace\": \"$(BRANCH)\",\n        \"name\": \"ocp\"\n      }\n    },\n    \"latest\": {\n      \"integration\": {\n        \"namespace\": \"$(BRANCH)\",\n        \"name\": \"ocp\",\n        \"include_built_images\": true\n      }\n    }\n  },\n  \"tests\": [\n    {\n      \"as\": \"launch\",\n      \"steps\": {\n        \"cluster_profile\": \"$(CLUSTER_TYPE)\",\n        \"workflow\": \"openshift-upgrade-$(CLUSTER_TYPE)\",\n        \"env\": {\n          \"TEST_SUITE\": \"all\",\n          \"TEST_TYPE\": \"upgrade\"\n        },\n        \"dependencies\": {\n          \"OPENSHIFT_INSTALL_RELEASE_IMAGE_OVERRIDE\": \"release:initial\",\n          \"OPENSHIFT_UPGRADE_RELEASE_IMAGE_OVERRIDE\": \"release:latest\"\n        }\n      }\n    }\n  ],\n  \"resources\": {\n    \"*\": {\n      \"requests\": {\n        \"cpu\": \"100m\",\n        \"memory\": \"200Mi\"\n      },\n      \"limits\": {\n        \"memory\": \"6Gi\"\n      }\n    }\n  }\n}"
+						},
+						{
+							"name": "JOB_NAME_SAFE",
+							"value": "launch"
+						},
+						{
+							"name": "TEST_COMMAND",
+							"value": "sleep $(CLUSTER_DURATION) \u0026 wait"
+						},
+						{
+							"name": "NAMESPACE",
+							"value": "ci-ln-jmljf8t"
+						}
+					],
+					"resources": {
+						"requests": {
+							"cpu": "10m"
+						}
+					},
+					"volumeMounts": [
+						{
+							"name": "boskos",
+							"readOnly": true,
+							"mountPath": "/etc/boskos"
+						},
+						{
+							"name": "cluster-profile",
+							"mountPath": "/usr/local/launch-cluster-profile"
+						},
+						{
+							"name": "gcs-credentials",
+							"readOnly": true,
+							"mountPath": "/secrets/gcs"
+						},
+						{
+							"name": "pull-secret",
+							"readOnly": true,
+							"mountPath": "/etc/pull-secret"
+						},
+						{
+							"name": "push-secret",
+							"readOnly": true,
+							"mountPath": "/etc/push-secret"
+						},
+						{
+							"name": "release-pull-secret",
+							"mountPath": "/usr/local/pull-secret"
+						}
+					],
+					"imagePullPolicy": "Always"
+				}
+			],
+			"serviceAccountName": "ci-operator"
+		},
+		"decoration_config": {
+			"timeout": "4h0m0s",
+			"grace_period": "1h0m0s",
+			"utility_images": {
+				"clonerefs": "gcr.io/k8s-prow/clonerefs:v20220513-69ff551a87",
+				"initupload": "gcr.io/k8s-prow/initupload:v20220513-69ff551a87",
+				"entrypoint": "gcr.io/k8s-prow/entrypoint:v20220513-69ff551a87",
+				"sidecar": "gcr.io/k8s-prow/sidecar:v20220513-69ff551a87"
+			},
+			"resources": {
+				"clonerefs": {
+					"limits": {
+						"memory": "3Gi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "500Mi"
+					}
+				},
+				"initupload": {
+					"limits": {
+						"memory": "200Mi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "50Mi"
+					}
+				},
+				"place_entrypoint": {
+					"limits": {
+						"memory": "100Mi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "25Mi"
+					}
+				},
+				"sidecar": {
+					"limits": {
+						"memory": "2Gi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "250Mi"
+					}
+				}
+			},
+			"gcs_configuration": {
+				"bucket": "origin-ci-test",
+				"path_strategy": "single",
+				"default_org": "openshift",
+				"default_repo": "origin",
+				"mediaTypes": {
+					"log": "text/plain"
+				}
+			},
+			"gcs_credentials_secret": "gce-sa-credentials-gcs-publisher",
+			"skip_cloning": true,
+			"censor_secrets": true
+		},
+		"prowjob_defaults": {
+			"tenant_id": "GlobalDefaultID"
+		}
+	},
+	"status": {
+		"startTime": "2022-05-16T10:33:39Z",
+		"pendingTime": "2022-05-16T10:33:39Z",
+		"completionTime": "2022-05-16T12:27:23Z",
+		"state": "success",
+		"description": "Job succeeded.",
+		"url": "https://prow.ci.openshift.org/view/gs/origin-ci-test/logs/release-openshift-origin-installer-launch-gcp-modern/1526148867370782720",
+		"pod_name": "chat-bot-2022-05-16-103338.9814",
+		"build_id": "1526148867370782720",
+		"prev_report_states": {
+			"gcsk8sreporter": "pending",
+			"gcsreporter": "pending"
+		}
+	}
+}

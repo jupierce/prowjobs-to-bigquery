@@ -1,0 +1,402 @@
+{
+	"kind": "ProwJob",
+	"apiVersion": "prow.k8s.io/v1",
+	"metadata": {
+		"name": "ca7b23b7-d555-11ec-ac3c-0a580a8312e3",
+		"namespace": "ci",
+		"uid": "bd543f12-2d66-4be7-a7c0-381760c6a38e",
+		"resourceVersion": "2000922077",
+		"generation": 5,
+		"creationTimestamp": "2022-05-16T20:21:38Z",
+		"labels": {
+			"created-by-prow": "true",
+			"prow.k8s.io/build-id": "1526296841031782400",
+			"prow.k8s.io/context": "",
+			"prow.k8s.io/id": "ca7b23b7-d555-11ec-ac3c-0a580a8312e3",
+			"prow.k8s.io/job": "openshift-kubernetes-1252-nightly-4.11-e2e-alibaba",
+			"prow.k8s.io/refs.base_ref": "master",
+			"prow.k8s.io/refs.org": "openshift",
+			"prow.k8s.io/refs.pull": "1252",
+			"prow.k8s.io/refs.repo": "kubernetes",
+			"prow.k8s.io/type": "periodic",
+			"pullrequestpayloadqualificationruns.ci.openshift.io": "c9911df0-d555-11ec-90e4-790a81f17f26-0",
+			"releaseJobNameHash": "6772961330d2b930e85e73bad5123662"
+		},
+		"annotations": {
+			"prow.k8s.io/context": "",
+			"prow.k8s.io/job": "openshift-kubernetes-1252-nightly-4.11-e2e-alibaba",
+			"releaseJobName": "periodic-ci-openshift-release-master-nightly-4.11-e2e-alibaba"
+		},
+		"managedFields": [
+			{
+				"manager": "job-trigger-controller-manager",
+				"operation": "Update",
+				"apiVersion": "prow.k8s.io/v1",
+				"time": "2022-05-16T20:21:38Z",
+				"fieldsType": "FieldsV1",
+				"fieldsV1": {
+					"f:metadata": {
+						"f:annotations": {
+							".": {},
+							"f:prow.k8s.io/context": {},
+							"f:prow.k8s.io/job": {},
+							"f:releaseJobName": {}
+						},
+						"f:labels": {
+							".": {},
+							"f:created-by-prow": {},
+							"f:prow.k8s.io/context": {},
+							"f:prow.k8s.io/job": {},
+							"f:prow.k8s.io/refs.base_ref": {},
+							"f:prow.k8s.io/refs.org": {},
+							"f:prow.k8s.io/refs.pull": {},
+							"f:prow.k8s.io/refs.repo": {},
+							"f:prow.k8s.io/type": {},
+							"f:pullrequestpayloadqualificationruns.ci.openshift.io": {},
+							"f:releaseJobNameHash": {}
+						}
+					},
+					"f:spec": {
+						".": {},
+						"f:agent": {},
+						"f:cluster": {},
+						"f:decoration_config": {
+							".": {},
+							"f:censor_secrets": {},
+							"f:gcs_configuration": {
+								".": {},
+								"f:bucket": {},
+								"f:default_org": {},
+								"f:default_repo": {},
+								"f:mediaTypes": {
+									".": {},
+									"f:log": {}
+								},
+								"f:path_strategy": {}
+							},
+							"f:gcs_credentials_secret": {},
+							"f:grace_period": {},
+							"f:resources": {
+								".": {},
+								"f:clonerefs": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								},
+								"f:initupload": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								},
+								"f:place_entrypoint": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								},
+								"f:sidecar": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								}
+							},
+							"f:timeout": {},
+							"f:utility_images": {
+								".": {},
+								"f:clonerefs": {},
+								"f:entrypoint": {},
+								"f:initupload": {},
+								"f:sidecar": {}
+							}
+						},
+						"f:extra_refs": {},
+						"f:job": {},
+						"f:namespace": {},
+						"f:pod_spec": {
+							".": {},
+							"f:containers": {},
+							"f:serviceAccountName": {},
+							"f:volumes": {}
+						},
+						"f:prowjob_defaults": {
+							".": {},
+							"f:tenant_id": {}
+						},
+						"f:report": {},
+						"f:type": {}
+					},
+					"f:status": {
+						".": {},
+						"f:startTime": {}
+					}
+				}
+			},
+			{
+				"manager": "crier",
+				"operation": "Update",
+				"apiVersion": "prow.k8s.io/v1",
+				"time": "2022-05-16T20:21:39Z",
+				"fieldsType": "FieldsV1",
+				"fieldsV1": {
+					"f:status": {
+						"f:prev_report_states": {
+							".": {},
+							"f:gcsk8sreporter": {},
+							"f:gcsreporter": {}
+						}
+					}
+				}
+			},
+			{
+				"manager": "prow-controller-manager",
+				"operation": "Update",
+				"apiVersion": "prow.k8s.io/v1",
+				"time": "2022-05-16T23:17:37Z",
+				"fieldsType": "FieldsV1",
+				"fieldsV1": {
+					"f:metadata": {
+						"f:labels": {
+							"f:prow.k8s.io/build-id": {},
+							"f:prow.k8s.io/id": {}
+						}
+					},
+					"f:status": {
+						"f:build_id": {},
+						"f:completionTime": {},
+						"f:description": {},
+						"f:pendingTime": {},
+						"f:pod_name": {},
+						"f:state": {},
+						"f:url": {}
+					}
+				}
+			}
+		]
+	},
+	"spec": {
+		"type": "periodic",
+		"agent": "kubernetes",
+		"cluster": "build01",
+		"namespace": "ci",
+		"job": "openshift-kubernetes-1252-nightly-4.11-e2e-alibaba",
+		"extra_refs": [
+			{
+				"org": "openshift",
+				"repo": "kubernetes",
+				"base_ref": "master",
+				"base_sha": "69213f85dee380a180f1c4f141f482a8c7cbcac3",
+				"pulls": [
+					{
+						"number": 1252,
+						"author": "tkashem",
+						"sha": "fa00c301093bd35dec8a495dc7b6a6de8fc06cf5",
+						"title": "Bug 2086092: update kube to v1.24.0"
+					}
+				],
+				"path_alias": "k8s.io/kubernetes"
+			}
+		],
+		"report": true,
+		"pod_spec": {
+			"volumes": [
+				{
+					"name": "boskos",
+					"secret": {
+						"secretName": "boskos-credentials",
+						"items": [
+							{
+								"key": "credentials",
+								"path": "credentials"
+							}
+						]
+					}
+				},
+				{
+					"name": "ci-pull-credentials",
+					"secret": {
+						"secretName": "ci-pull-credentials"
+					}
+				},
+				{
+					"name": "cluster-profile",
+					"secret": {
+						"secretName": "cluster-secrets-alibabacloud"
+					}
+				},
+				{
+					"name": "pull-secret",
+					"secret": {
+						"secretName": "registry-pull-credentials"
+					}
+				},
+				{
+					"name": "result-aggregator",
+					"secret": {
+						"secretName": "result-aggregator"
+					}
+				}
+			],
+			"containers": [
+				{
+					"name": "",
+					"image": "ci-operator:latest",
+					"command": [
+						"ci-operator"
+					],
+					"args": [
+						"--gcs-upload-secret=/secrets/gcs/service-account.json",
+						"--image-import-pull-secret=/etc/pull-secret/.dockerconfigjson",
+						"--input-hash=c9911df0-d555-11ec-90e4-790a81f17f26-0",
+						"--lease-server-credentials-file=/etc/boskos/credentials",
+						"--report-credentials-file=/etc/report/credentials",
+						"--secret-dir=/secrets/ci-pull-credentials",
+						"--secret-dir=/usr/local/e2e-alibaba-cluster-profile",
+						"--target=e2e-alibaba",
+						"--with-test-from=openshift/release@master__nightly-4.11:e2e-alibaba"
+					],
+					"resources": {
+						"requests": {
+							"cpu": "10m"
+						}
+					},
+					"volumeMounts": [
+						{
+							"name": "boskos",
+							"readOnly": true,
+							"mountPath": "/etc/boskos"
+						},
+						{
+							"name": "ci-pull-credentials",
+							"readOnly": true,
+							"mountPath": "/secrets/ci-pull-credentials"
+						},
+						{
+							"name": "cluster-profile",
+							"mountPath": "/usr/local/e2e-alibaba-cluster-profile"
+						},
+						{
+							"name": "gcs-credentials",
+							"readOnly": true,
+							"mountPath": "/secrets/gcs"
+						},
+						{
+							"name": "pull-secret",
+							"readOnly": true,
+							"mountPath": "/etc/pull-secret"
+						},
+						{
+							"name": "result-aggregator",
+							"readOnly": true,
+							"mountPath": "/etc/report"
+						}
+					],
+					"imagePullPolicy": "Always"
+				}
+			],
+			"serviceAccountName": "ci-operator"
+		},
+		"decoration_config": {
+			"timeout": "4h0m0s",
+			"grace_period": "1h0m0s",
+			"utility_images": {
+				"clonerefs": "gcr.io/k8s-prow/clonerefs:v20220513-69ff551a87",
+				"initupload": "gcr.io/k8s-prow/initupload:v20220513-69ff551a87",
+				"entrypoint": "gcr.io/k8s-prow/entrypoint:v20220513-69ff551a87",
+				"sidecar": "gcr.io/k8s-prow/sidecar:v20220513-69ff551a87"
+			},
+			"resources": {
+				"clonerefs": {
+					"limits": {
+						"memory": "3Gi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "500Mi"
+					}
+				},
+				"initupload": {
+					"limits": {
+						"memory": "200Mi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "50Mi"
+					}
+				},
+				"place_entrypoint": {
+					"limits": {
+						"memory": "100Mi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "25Mi"
+					}
+				},
+				"sidecar": {
+					"limits": {
+						"memory": "2Gi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "250Mi"
+					}
+				}
+			},
+			"gcs_configuration": {
+				"bucket": "origin-ci-test",
+				"path_strategy": "single",
+				"default_org": "openshift",
+				"default_repo": "origin",
+				"mediaTypes": {
+					"log": "text/plain"
+				}
+			},
+			"gcs_credentials_secret": "gce-sa-credentials-gcs-publisher",
+			"censor_secrets": true
+		},
+		"prowjob_defaults": {
+			"tenant_id": "GlobalDefaultID"
+		}
+	},
+	"status": {
+		"startTime": "2022-05-16T20:21:38Z",
+		"pendingTime": "2022-05-16T20:21:38Z",
+		"completionTime": "2022-05-16T23:17:37Z",
+		"state": "success",
+		"description": "Job succeeded.",
+		"url": "https://prow.ci.openshift.org/view/gs/origin-ci-test/logs/openshift-kubernetes-1252-nightly-4.11-e2e-alibaba/1526296841031782400",
+		"pod_name": "ca7b23b7-d555-11ec-ac3c-0a580a8312e3",
+		"build_id": "1526296841031782400",
+		"prev_report_states": {
+			"gcsk8sreporter": "pending",
+			"gcsreporter": "pending"
+		}
+	}
+}

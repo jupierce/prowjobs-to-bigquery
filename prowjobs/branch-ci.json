@@ -1,0 +1,376 @@
+{
+	"kind": "ProwJob",
+	"apiVersion": "prow.k8s.io/v1",
+	"metadata": {
+		"name": "ae108bcd-d1d5-11ec-a039-0a580a802953",
+		"namespace": "ci",
+		"uid": "6ef82b1a-a80a-456d-bf92-d48865aa8c5f",
+		"resourceVersion": "1989073894",
+		"generation": 7,
+		"creationTimestamp": "2022-05-12T09:27:02Z",
+		"labels": {
+			"ci-operator.openshift.io/is-promotion": "true",
+			"ci.openshift.io/generator": "prowgen",
+			"created-by-prow": "true",
+			"event-GUID": "adc723b8-d1d5-11ec-91b7-7ebad4287c36",
+			"prow.k8s.io/build-id": "1524682550948139008",
+			"prow.k8s.io/context": "branch-ci-openshift-oc-master-images",
+			"prow.k8s.io/id": "ae108bcd-d1d5-11ec-a039-0a580a802953",
+			"prow.k8s.io/job": "branch-ci-openshift-oc-master-images",
+			"prow.k8s.io/refs.base_ref": "master",
+			"prow.k8s.io/refs.org": "openshift",
+			"prow.k8s.io/refs.repo": "oc",
+			"prow.k8s.io/type": "postsubmit"
+		},
+		"annotations": {
+			"prow.k8s.io/context": "branch-ci-openshift-oc-master-images",
+			"prow.k8s.io/job": "branch-ci-openshift-oc-master-images"
+		},
+		"managedFields": [
+			{
+				"manager": "crier",
+				"operation": "Update",
+				"apiVersion": "prow.k8s.io/v1",
+				"time": "2022-05-12T09:27:02Z",
+				"fieldsType": "FieldsV1",
+				"fieldsV1": {
+					"f:status": {
+						"f:prev_report_states": {
+							".": {},
+							"f:gcsk8sreporter": {},
+							"f:gcsreporter": {},
+							"f:github-reporter": {}
+						}
+					}
+				}
+			},
+			{
+				"manager": "hook",
+				"operation": "Update",
+				"apiVersion": "prow.k8s.io/v1",
+				"time": "2022-05-12T09:27:02Z",
+				"fieldsType": "FieldsV1",
+				"fieldsV1": {
+					"f:metadata": {
+						"f:annotations": {
+							".": {},
+							"f:prow.k8s.io/context": {},
+							"f:prow.k8s.io/job": {}
+						},
+						"f:labels": {
+							".": {},
+							"f:ci-operator.openshift.io/is-promotion": {},
+							"f:ci.openshift.io/generator": {},
+							"f:created-by-prow": {},
+							"f:event-GUID": {},
+							"f:prow.k8s.io/context": {},
+							"f:prow.k8s.io/job": {},
+							"f:prow.k8s.io/refs.base_ref": {},
+							"f:prow.k8s.io/refs.org": {},
+							"f:prow.k8s.io/refs.repo": {},
+							"f:prow.k8s.io/type": {}
+						}
+					},
+					"f:spec": {
+						".": {},
+						"f:agent": {},
+						"f:cluster": {},
+						"f:context": {},
+						"f:decoration_config": {
+							".": {},
+							"f:censor_secrets": {},
+							"f:gcs_configuration": {
+								".": {},
+								"f:bucket": {},
+								"f:default_org": {},
+								"f:default_repo": {},
+								"f:mediaTypes": {
+									".": {},
+									"f:log": {}
+								},
+								"f:path_strategy": {}
+							},
+							"f:gcs_credentials_secret": {},
+							"f:grace_period": {},
+							"f:resources": {
+								".": {},
+								"f:clonerefs": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								},
+								"f:initupload": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								},
+								"f:place_entrypoint": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								},
+								"f:sidecar": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								}
+							},
+							"f:timeout": {},
+							"f:utility_images": {
+								".": {},
+								"f:clonerefs": {},
+								"f:entrypoint": {},
+								"f:initupload": {},
+								"f:sidecar": {}
+							}
+						},
+						"f:job": {},
+						"f:max_concurrency": {},
+						"f:namespace": {},
+						"f:pod_spec": {
+							".": {},
+							"f:containers": {},
+							"f:serviceAccountName": {},
+							"f:volumes": {}
+						},
+						"f:prowjob_defaults": {
+							".": {},
+							"f:tenant_id": {}
+						},
+						"f:refs": {
+							".": {},
+							"f:base_link": {},
+							"f:base_ref": {},
+							"f:base_sha": {},
+							"f:org": {},
+							"f:repo": {},
+							"f:repo_link": {}
+						},
+						"f:report": {},
+						"f:type": {}
+					},
+					"f:status": {
+						".": {},
+						"f:startTime": {}
+					}
+				}
+			},
+			{
+				"manager": "prow-controller-manager",
+				"operation": "Update",
+				"apiVersion": "prow.k8s.io/v1",
+				"time": "2022-05-12T09:57:08Z",
+				"fieldsType": "FieldsV1",
+				"fieldsV1": {
+					"f:metadata": {
+						"f:labels": {
+							"f:prow.k8s.io/build-id": {},
+							"f:prow.k8s.io/id": {}
+						}
+					},
+					"f:status": {
+						"f:build_id": {},
+						"f:completionTime": {},
+						"f:description": {},
+						"f:pendingTime": {},
+						"f:pod_name": {},
+						"f:state": {},
+						"f:url": {}
+					}
+				}
+			}
+		]
+	},
+	"spec": {
+		"type": "postsubmit",
+		"agent": "kubernetes",
+		"cluster": "build04",
+		"namespace": "ci",
+		"job": "branch-ci-openshift-oc-master-images",
+		"refs": {
+			"org": "openshift",
+			"repo": "oc",
+			"repo_link": "https://github.com/openshift/oc",
+			"base_ref": "master",
+			"base_sha": "82be10123f736b845d5201c9956540cb03a45025",
+			"base_link": "https://github.com/openshift/oc/compare/135b9e80a40f...82be10123f73"
+		},
+		"report": true,
+		"context": "branch-ci-openshift-oc-master-images",
+		"max_concurrency": 1,
+		"pod_spec": {
+			"volumes": [
+				{
+					"name": "pull-secret",
+					"secret": {
+						"secretName": "registry-pull-credentials"
+					}
+				},
+				{
+					"name": "push-secret",
+					"secret": {
+						"secretName": "registry-push-credentials-ci-central"
+					}
+				},
+				{
+					"name": "result-aggregator",
+					"secret": {
+						"secretName": "result-aggregator"
+					}
+				}
+			],
+			"containers": [
+				{
+					"name": "",
+					"image": "ci-operator:latest",
+					"command": [
+						"ci-operator"
+					],
+					"args": [
+						"--gcs-upload-secret=/secrets/gcs/service-account.json",
+						"--image-import-pull-secret=/etc/pull-secret/.dockerconfigjson",
+						"--image-mirror-push-secret=/etc/push-secret/.dockerconfigjson",
+						"--promote",
+						"--report-credentials-file=/etc/report/credentials",
+						"--target=[images]",
+						"--target=rpms"
+					],
+					"resources": {
+						"requests": {
+							"cpu": "10m"
+						}
+					},
+					"volumeMounts": [
+						{
+							"name": "gcs-credentials",
+							"readOnly": true,
+							"mountPath": "/secrets/gcs"
+						},
+						{
+							"name": "pull-secret",
+							"readOnly": true,
+							"mountPath": "/etc/pull-secret"
+						},
+						{
+							"name": "push-secret",
+							"readOnly": true,
+							"mountPath": "/etc/push-secret"
+						},
+						{
+							"name": "result-aggregator",
+							"readOnly": true,
+							"mountPath": "/etc/report"
+						}
+					],
+					"imagePullPolicy": "Always"
+				}
+			],
+			"serviceAccountName": "ci-operator"
+		},
+		"decoration_config": {
+			"timeout": "4h0m0s",
+			"grace_period": "1h0m0s",
+			"utility_images": {
+				"clonerefs": "gcr.io/k8s-prow/clonerefs:v20220511-a855e15670",
+				"initupload": "gcr.io/k8s-prow/initupload:v20220511-a855e15670",
+				"entrypoint": "gcr.io/k8s-prow/entrypoint:v20220511-a855e15670",
+				"sidecar": "gcr.io/k8s-prow/sidecar:v20220511-a855e15670"
+			},
+			"resources": {
+				"clonerefs": {
+					"limits": {
+						"memory": "3Gi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "500Mi"
+					}
+				},
+				"initupload": {
+					"limits": {
+						"memory": "200Mi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "50Mi"
+					}
+				},
+				"place_entrypoint": {
+					"limits": {
+						"memory": "100Mi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "25Mi"
+					}
+				},
+				"sidecar": {
+					"limits": {
+						"memory": "2Gi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "250Mi"
+					}
+				}
+			},
+			"gcs_configuration": {
+				"bucket": "origin-ci-test",
+				"path_strategy": "single",
+				"default_org": "openshift",
+				"default_repo": "origin",
+				"mediaTypes": {
+					"log": "text/plain"
+				}
+			},
+			"gcs_credentials_secret": "gce-sa-credentials-gcs-publisher",
+			"censor_secrets": true
+		},
+		"prowjob_defaults": {
+			"tenant_id": "GlobalDefaultID"
+		}
+	},
+	"status": {
+		"startTime": "2022-05-12T09:27:02Z",
+		"pendingTime": "2022-05-12T09:27:02Z",
+		"completionTime": "2022-05-12T09:57:08Z",
+		"state": "success",
+		"description": "Job succeeded.",
+		"url": "https://prow.ci.openshift.org/view/gs/origin-ci-test/logs/branch-ci-openshift-oc-master-images/1524682550948139008",
+		"pod_name": "ae108bcd-d1d5-11ec-a039-0a580a802953",
+		"build_id": "1524682550948139008",
+		"prev_report_states": {
+			"gcsk8sreporter": "pending",
+			"gcsreporter": "pending",
+			"github-reporter": "pending"
+		}
+	}
+}
