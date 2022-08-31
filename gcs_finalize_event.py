@@ -10,7 +10,7 @@ from model import Model, Missing
 from google.cloud import bigquery, storage
 
 # Destination for parsed prowjob info
-JOBS_TABLE_ID = 'openshift-gce-devel.ci_analysis.jobs'
+JOBS_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.jobs'
 
 # Using globals is ugly, but when running in cold load mode, these will be set for each separate process.
 # https://stackoverflow.com/questions/10117073/how-to-use-initializer-to-set-up-my-multiprocess-pool
@@ -55,6 +55,7 @@ class JobsRecord(NamedTuple):
     prpq: str
     manager: str
     schema_level: int
+    retest: str
 
 
 def or_none(v):
@@ -163,7 +164,8 @@ def parse_prowjob_json(prowjob_json_text):
         features=features_list,
         prpq=or_none(labels['pullrequestpayloadqualificationruns.ci.openshift.io']),
         manager=manager,
-        schema_level=3
+        schema_level=10,
+        retest=or_none(labels['prow.k8s.io/retest']),
     )
 
     record_dict = dict(record._asdict())
@@ -256,4 +258,3 @@ def cold_load_all():
 if __name__ == '__main__':
     # parse_prowjob_json(pathlib.Path("prowjobs/payload-pr.json").read_text())
     cold_load_all()
-
