@@ -28,6 +28,7 @@ def process_connection_setup():
 class JobsRecord(NamedTuple):
     created: str
     prowjob_build_id: str
+    prowjob_url: str
     prowjob_type: str
     ci_op_cloud: str
     ci_op_cluster_profile: str
@@ -138,6 +139,7 @@ def parse_prowjob_json(prowjob_json_text):
     record = JobsRecord(
         created=to_ts(prowjob.metadata.creationTimestamp),
         prowjob_build_id=or_none(prowjob.status.build_id),
+        prowjob_url=or_none(prowjob.status.url),
         prowjob_type=or_none(prowjob.spec.type),
         ci_op_cloud=or_none(labels['ci-operator.openshift.io/cloud']),
         ci_op_cluster_profile=or_none(cluster_profile),
