@@ -1,0 +1,184 @@
+{"level":"info","msg":"ci-operator version v20230203-c37de57c6","time":"2023-02-03T12:34:07Z"}
+{"level":"debug","msg":"performing request method POST url https://config.ci.openshift.org/resolve","time":"2023-02-03T12:34:07Z"}
+{"level":"info","msg":"No source defined","time":"2023-02-03T12:34:08Z"}
+{"level":"info","msg":"Using explicitly provided pull-spec for release initial ()","time":"2023-02-03T12:34:08Z"}
+{"level":"info","msg":"Using explicitly provided pull-spec for release latest (registry.ci.openshift.org/ocp/release@sha256:e86e058f7f66a687e273792f2e4ec70f3cc43ec9d2894bebee5caf5c4d4851a3)","time":"2023-02-03T12:34:08Z"}
+{"level":"info","msg":"Resolved release latest to registry.ci.openshift.org/ocp/release@sha256:e86e058f7f66a687e273792f2e4ec70f3cc43ec9d2894bebee5caf5c4d4851a3","time":"2023-02-03T12:34:08Z"}
+{"level":"debug","msg":"Resolved origin/centos:8 (test steps: ipi-conf,ovn-conf,ovn-conf-hybrid-manifest) to sha256:a1801b843b1bfaf77c501e7a6d3f709401a1e0c83863037fa3aab063a7fdb9dc.","time":"2023-02-03T12:34:08Z"}
+{"level":"debug","msg":"Resolved ocp/4.12:upi-installer (test steps: ipi-conf-aws,ipi-conf-aws-blackholenetwork,ipi-conf-aws-proxy,ipi-conf-aws-sharednetwork,ipi-conf-telemetry) to sha256:baa1805040926c13223057a6c2eeb05dac65b66cfecff19ed7527c7e038a5418.","time":"2023-02-03T12:34:08Z"}
+{"level":"debug","msg":"Resolved ocp/4.5:upi-installer (test steps: gather-aws-console,ipi-deprovision-aws-blackholenetwork,ipi-deprovision-aws-sharednetwork,ipi-deprovision-proxy) to sha256:62c3dd3bc7647a98c69cd3c042074b56377b5887138bbecb8bc273b190b61d3c.","time":"2023-02-03T12:34:08Z"}
+{"level":"debug","msg":"Resolved ocp/cli-yq:latest (test steps: sdn-conf) to sha256:cdaf680a7043ed3a50c872890d6267f197e85494213cace64d413b8d1573895f.","time":"2023-02-03T12:34:08Z"}
+{"level":"debug","msg":"Resolved ocp/cli-jq:latest (test steps: openshift-e2e-test-capabilities-check) to sha256:22a2dcb1a3ddeb23469bf08ec822bc963b97fc9e7a186eacce0f180dae328354.","time":"2023-02-03T12:34:08Z"}
+{"level":"trace","msg":"Using binary as hash: /usr/bin/ci-operator 1675386859 70924931","time":"2023-02-03T12:34:08Z"}
+{"level":"info","msg":"Using namespace https://console-openshift-console.apps.build05.l9oh.p1.openshiftapps.com/k8s/cluster/projects/ci-ln-yvd570k","time":"2023-02-03T12:34:08Z"}
+{"level":"info","msg":"Running [input:origin-centos-8], [input:ocp-4.12-upi-installer], [input:ocp-4.5-upi-installer], [release:latest], [images], launch","time":"2023-02-03T12:34:08Z"}
+{"level":"debug","msg":"Creating namespace ci-ln-yvd570k","time":"2023-02-03T12:34:08Z"}
+{"level":"debug","msg":"Spent 1.546026ms waiting for RBAC to initialize in the new namespace.","time":"2023-02-03T12:34:08Z"}
+{"level":"debug","msg":"[0/120] Image pull secrets in namespace not yet ready, sleeping for a second...","time":"2023-02-03T12:34:08Z"}
+{"level":"debug","msg":"Spent 1.016937667s waiting for image pull secrets to initialize in the new namespace.","time":"2023-02-03T12:34:09Z"}
+{"level":"debug","msg":"Setting up pipeline ImageStream for the test","time":"2023-02-03T12:34:09Z"}
+{"level":"debug","msg":"Created secret launch-cluster-profile","time":"2023-02-03T12:34:09Z"}
+{"level":"debug","msg":"Created secret pull-secret","time":"2023-02-03T12:34:09Z"}
+{"level":"debug","msg":"Created PDB for pods with openshift.io/build.name label","time":"2023-02-03T12:34:09Z"}
+{"level":"debug","msg":"Created PDB for pods with created-by-ci label","time":"2023-02-03T12:34:09Z"}
+{"level":"info","msg":"Tagging ocp/4.5:upi-installer into pipeline:ocp-4.5-upi-installer.","time":"2023-02-03T12:34:09Z"}
+{"level":"info","msg":"Tagging origin/centos:8 into pipeline:origin-centos-8.","time":"2023-02-03T12:34:09Z"}
+{"level":"info","msg":"Tagging ocp/4.12:upi-installer into pipeline:ocp-4.12-upi-installer.","time":"2023-02-03T12:34:09Z"}
+{"level":"info","msg":"Importing release image latest.","time":"2023-02-03T12:34:09Z"}
+{"level":"debug","msg":"Executing pod \"release-images-latest-cli\" running image \"release:latest\"","time":"2023-02-03T12:34:09Z"}
+{"level":"debug","msg":"Executing pod \"release-images-latest\" running image \"quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:2078c358b32af7a39d1816d31ae3914a48b67cb522768c558736221c532fa566\"","time":"2023-02-03T12:34:24Z"}
+{"level":"info","msg":"Imported release 4.11.20 created at 2022-12-12 19:52:44 +0000 UTC with 171 images to tag release:latest","time":"2023-02-03T12:36:02Z"}
+{"level":"info","msg":"Acquiring leases for test launch: [aws-2-quota-slice]","time":"2023-02-03T12:36:02Z"}
+{"level":"debug","msg":"Acquiring 1 lease(s) for aws-2-quota-slice","time":"2023-02-03T12:36:02Z"}
+{"level":"info","msg":"Acquired 1 lease(s) for aws-2-quota-slice: [us-east-1--aws-2-quota-slice-03]","time":"2023-02-03T12:36:02Z"}
+{"level":"info","msg":"Running multi-stage test launch","time":"2023-02-03T12:36:02Z"}
+{"level":"debug","msg":"Creating multi-stage test shared directory \"launch\"","time":"2023-02-03T12:36:02Z"}
+{"level":"debug","msg":"Creating multi-stage test credentials for \"launch\"","time":"2023-02-03T12:36:02Z"}
+{"level":"debug","msg":"Creating multi-stage test commands configmap for \"launch\"","time":"2023-02-03T12:36:02Z"}
+{"level":"info","msg":"Running multi-stage phase pre","time":"2023-02-03T12:36:02Z"}
+{"level":"info","msg":"Running step launch-ipi-conf.","time":"2023-02-03T12:36:02Z"}
+{"level":"debug","msg":"Executing pod \"launch-ipi-conf\" running image \"pipeline:origin-centos-8\"","time":"2023-02-03T12:36:02Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod launch-ipi-conf completed successfully","time":"2023-02-03T12:36:12Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod launch-ipi-conf completed successfully","time":"2023-02-03T12:36:12Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod launch-ipi-conf completed successfully","time":"2023-02-03T12:36:32Z"}
+{"level":"debug","msg":"Container sidecar in pod launch-ipi-conf completed successfully","time":"2023-02-03T12:36:32Z"}
+{"level":"debug","msg":"Container test in pod launch-ipi-conf completed successfully","time":"2023-02-03T12:36:32Z"}
+{"level":"debug","msg":"Pod launch-ipi-conf succeeded after 26s","time":"2023-02-03T12:36:32Z"}
+{"level":"info","msg":"Step launch-ipi-conf succeeded after 30s.","time":"2023-02-03T12:36:32Z"}
+{"level":"info","msg":"Running step launch-ipi-conf-telemetry.","time":"2023-02-03T12:36:32Z"}
+{"level":"debug","msg":"Executing pod \"launch-ipi-conf-telemetry\" running image \"pipeline:ocp-4.12-upi-installer\"","time":"2023-02-03T12:36:32Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod launch-ipi-conf-telemetry completed successfully","time":"2023-02-03T12:36:42Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod launch-ipi-conf-telemetry completed successfully","time":"2023-02-03T12:36:42Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod launch-ipi-conf-telemetry completed successfully","time":"2023-02-03T12:36:42Z"}
+{"level":"debug","msg":"Container sidecar in pod launch-ipi-conf-telemetry completed successfully","time":"2023-02-03T12:36:42Z"}
+{"level":"debug","msg":"Container test in pod launch-ipi-conf-telemetry completed successfully","time":"2023-02-03T12:36:42Z"}
+{"level":"debug","msg":"Pod launch-ipi-conf-telemetry succeeded after 8s","time":"2023-02-03T12:36:42Z"}
+{"level":"info","msg":"Step launch-ipi-conf-telemetry succeeded after 10s.","time":"2023-02-03T12:36:42Z"}
+{"level":"info","msg":"Running step launch-ipi-conf-aws.","time":"2023-02-03T12:36:42Z"}
+{"level":"debug","msg":"Executing pod \"launch-ipi-conf-aws\" running image \"pipeline:ocp-4.12-upi-installer\"","time":"2023-02-03T12:36:42Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod launch-ipi-conf-aws completed successfully","time":"2023-02-03T12:36:52Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod launch-ipi-conf-aws completed successfully","time":"2023-02-03T12:36:52Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod launch-ipi-conf-aws completed successfully","time":"2023-02-03T12:36:52Z"}
+{"level":"debug","msg":"Container sidecar in pod launch-ipi-conf-aws completed successfully","time":"2023-02-03T12:37:02Z"}
+{"level":"debug","msg":"Container test in pod launch-ipi-conf-aws completed successfully","time":"2023-02-03T12:37:02Z"}
+{"level":"debug","msg":"Pod launch-ipi-conf-aws succeeded after 11s","time":"2023-02-03T12:37:02Z"}
+{"level":"info","msg":"Step launch-ipi-conf-aws succeeded after 20s.","time":"2023-02-03T12:37:02Z"}
+{"level":"info","msg":"Running step launch-ipi-install-monitoringpvc.","time":"2023-02-03T12:37:02Z"}
+{"level":"debug","msg":"Executing pod \"launch-ipi-install-monitoringpvc\" running image \"stable:cli\"","time":"2023-02-03T12:37:02Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod launch-ipi-install-monitoringpvc completed successfully","time":"2023-02-03T12:37:12Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod launch-ipi-install-monitoringpvc completed successfully","time":"2023-02-03T12:37:12Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod launch-ipi-install-monitoringpvc completed successfully","time":"2023-02-03T12:37:12Z"}
+{"level":"debug","msg":"Container sidecar in pod launch-ipi-install-monitoringpvc completed successfully","time":"2023-02-03T12:37:22Z"}
+{"level":"debug","msg":"Container test in pod launch-ipi-install-monitoringpvc completed successfully","time":"2023-02-03T12:37:22Z"}
+{"level":"debug","msg":"Pod launch-ipi-install-monitoringpvc succeeded after 13s","time":"2023-02-03T12:37:22Z"}
+{"level":"info","msg":"Step launch-ipi-install-monitoringpvc succeeded after 20s.","time":"2023-02-03T12:37:22Z"}
+{"level":"info","msg":"Running step launch-ipi-install-rbac.","time":"2023-02-03T12:37:22Z"}
+{"level":"debug","msg":"Executing pod \"launch-ipi-install-rbac\" running image \"stable:cli\"","time":"2023-02-03T12:37:22Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod launch-ipi-install-rbac completed successfully","time":"2023-02-03T12:37:32Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod launch-ipi-install-rbac completed successfully","time":"2023-02-03T12:37:32Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod launch-ipi-install-rbac completed successfully","time":"2023-02-03T12:37:32Z"}
+{"level":"debug","msg":"Container test in pod launch-ipi-install-rbac completed successfully","time":"2023-02-03T12:37:32Z"}
+{"level":"debug","msg":"Container sidecar in pod launch-ipi-install-rbac completed successfully","time":"2023-02-03T12:37:42Z"}
+{"level":"debug","msg":"Pod launch-ipi-install-rbac succeeded after 11s","time":"2023-02-03T12:37:42Z"}
+{"level":"info","msg":"Step launch-ipi-install-rbac succeeded after 20s.","time":"2023-02-03T12:37:42Z"}
+{"level":"info","msg":"Running step launch-openshift-cluster-bot-rbac.","time":"2023-02-03T12:37:42Z"}
+{"level":"debug","msg":"Executing pod \"launch-openshift-cluster-bot-rbac\" running image \"stable:cli\"","time":"2023-02-03T12:37:42Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod launch-openshift-cluster-bot-rbac completed successfully","time":"2023-02-03T12:37:52Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod launch-openshift-cluster-bot-rbac completed successfully","time":"2023-02-03T12:37:52Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod launch-openshift-cluster-bot-rbac completed successfully","time":"2023-02-03T12:37:52Z"}
+{"level":"debug","msg":"Container sidecar in pod launch-openshift-cluster-bot-rbac completed successfully","time":"2023-02-03T12:37:52Z"}
+{"level":"debug","msg":"Container test in pod launch-openshift-cluster-bot-rbac completed successfully","time":"2023-02-03T12:37:52Z"}
+{"level":"debug","msg":"Pod launch-openshift-cluster-bot-rbac succeeded after 8s","time":"2023-02-03T12:37:52Z"}
+{"level":"info","msg":"Step launch-openshift-cluster-bot-rbac succeeded after 10s.","time":"2023-02-03T12:37:52Z"}
+{"level":"info","msg":"Running step launch-ipi-install-hosted-loki.","time":"2023-02-03T12:37:52Z"}
+{"level":"debug","msg":"Executing pod \"launch-ipi-install-hosted-loki\" running image \"stable:cli\"","time":"2023-02-03T12:37:52Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod launch-ipi-install-hosted-loki completed successfully","time":"2023-02-03T12:38:02Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod launch-ipi-install-hosted-loki completed successfully","time":"2023-02-03T12:38:02Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod launch-ipi-install-hosted-loki completed successfully","time":"2023-02-03T12:38:02Z"}
+{"level":"debug","msg":"Container sidecar in pod launch-ipi-install-hosted-loki completed successfully","time":"2023-02-03T12:38:02Z"}
+{"level":"debug","msg":"Container test in pod launch-ipi-install-hosted-loki completed successfully","time":"2023-02-03T12:38:02Z"}
+{"level":"debug","msg":"Pod launch-ipi-install-hosted-loki succeeded after 8s","time":"2023-02-03T12:38:02Z"}
+{"level":"info","msg":"Step launch-ipi-install-hosted-loki succeeded after 10s.","time":"2023-02-03T12:38:02Z"}
+{"level":"info","msg":"Running step launch-ipi-install-install.","time":"2023-02-03T12:38:02Z"}
+{"level":"debug","msg":"Executing pod \"launch-ipi-install-install\" running image \"stable:installer\"","time":"2023-02-03T12:38:02Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod launch-ipi-install-install completed successfully","time":"2023-02-03T12:38:12Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod launch-ipi-install-install completed successfully","time":"2023-02-03T12:38:12Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod launch-ipi-install-install completed successfully","time":"2023-02-03T12:38:12Z"}
+{"level":"debug","msg":"Container inject-cli in pod launch-ipi-install-install completed successfully","time":"2023-02-03T12:38:12Z"}
+{"error":"status 502 Bad Gateway, status code 502 updating us-east-1--aws-2-quota-slice-03","level":"warning","msg":"Failed to update lease \"us-east-1--aws-2-quota-slice-03\"","time":"2023-02-03T12:45:53Z"}
+{"level":"debug","msg":"Container sidecar in pod launch-ipi-install-install completed successfully","time":"2023-02-03T13:03:12Z"}
+{"level":"debug","msg":"Container test in pod launch-ipi-install-install completed successfully","time":"2023-02-03T13:03:12Z"}
+{"level":"debug","msg":"Pod launch-ipi-install-install succeeded after 25m4s","time":"2023-02-03T13:03:12Z"}
+{"level":"info","msg":"Step launch-ipi-install-install succeeded after 25m10s.","time":"2023-02-03T13:03:12Z"}
+{"level":"info","msg":"Running step launch-ipi-install-times-collection.","time":"2023-02-03T13:03:12Z"}
+{"level":"debug","msg":"Executing pod \"launch-ipi-install-times-collection\" running image \"stable:cli\"","time":"2023-02-03T13:03:12Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod launch-ipi-install-times-collection completed successfully","time":"2023-02-03T13:03:22Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod launch-ipi-install-times-collection completed successfully","time":"2023-02-03T13:03:22Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod launch-ipi-install-times-collection completed successfully","time":"2023-02-03T13:03:22Z"}
+{"level":"debug","msg":"Container sidecar in pod launch-ipi-install-times-collection completed successfully","time":"2023-02-03T13:03:22Z"}
+{"level":"debug","msg":"Container test in pod launch-ipi-install-times-collection completed successfully","time":"2023-02-03T13:03:22Z"}
+{"level":"debug","msg":"Pod launch-ipi-install-times-collection succeeded after 8s","time":"2023-02-03T13:03:22Z"}
+{"level":"info","msg":"Step launch-ipi-install-times-collection succeeded after 10s.","time":"2023-02-03T13:03:22Z"}
+{"level":"info","msg":"Step phase pre succeeded after 27m20s.","time":"2023-02-03T13:03:22Z"}
+{"level":"info","msg":"Running multi-stage phase test","time":"2023-02-03T13:03:22Z"}
+{"level":"info","msg":"Running step launch-clusterbot-wait.","time":"2023-02-03T13:03:22Z"}
+{"level":"debug","msg":"Executing pod \"launch-clusterbot-wait\" running image \"stable:cli\"","time":"2023-02-03T13:03:22Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod launch-clusterbot-wait completed successfully","time":"2023-02-03T13:03:33Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod launch-clusterbot-wait completed successfully","time":"2023-02-03T13:03:33Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod launch-clusterbot-wait completed successfully","time":"2023-02-03T13:03:33Z"}
+{"level":"debug","msg":"Container sidecar in pod launch-clusterbot-wait completed successfully","time":"2023-02-03T16:03:33Z"}
+{"level":"debug","msg":"Container test in pod launch-clusterbot-wait completed successfully","time":"2023-02-03T16:03:33Z"}
+{"level":"debug","msg":"Pod launch-clusterbot-wait succeeded after 3h0m7s","time":"2023-02-03T16:03:33Z"}
+{"level":"info","msg":"Step launch-clusterbot-wait succeeded after 3h0m10s.","time":"2023-02-03T16:03:33Z"}
+{"level":"info","msg":"Step phase test succeeded after 3h0m10s.","time":"2023-02-03T16:03:33Z"}
+{"level":"info","msg":"Running multi-stage phase post","time":"2023-02-03T16:03:33Z"}
+{"level":"info","msg":"Running step launch-gather-aws-console.","time":"2023-02-03T16:03:33Z"}
+{"level":"debug","msg":"Executing pod \"launch-gather-aws-console\" running image \"pipeline:ocp-4.5-upi-installer\"","time":"2023-02-03T16:03:33Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod launch-gather-aws-console completed successfully","time":"2023-02-03T16:03:43Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod launch-gather-aws-console completed successfully","time":"2023-02-03T16:03:43Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod launch-gather-aws-console completed successfully","time":"2023-02-03T16:03:43Z"}
+{"level":"debug","msg":"Container sidecar in pod launch-gather-aws-console completed successfully","time":"2023-02-03T16:03:53Z"}
+{"level":"debug","msg":"Container test in pod launch-gather-aws-console completed successfully","time":"2023-02-03T16:03:53Z"}
+{"level":"debug","msg":"Pod launch-gather-aws-console succeeded after 13s","time":"2023-02-03T16:03:53Z"}
+{"level":"info","msg":"Step launch-gather-aws-console succeeded after 20s.","time":"2023-02-03T16:03:53Z"}
+{"level":"info","msg":"Running step launch-gather-must-gather.","time":"2023-02-03T16:03:53Z"}
+{"level":"debug","msg":"Executing pod \"launch-gather-must-gather\" running image \"stable:cli\"","time":"2023-02-03T16:03:53Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod launch-gather-must-gather completed successfully","time":"2023-02-03T16:04:03Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod launch-gather-must-gather completed successfully","time":"2023-02-03T16:04:03Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod launch-gather-must-gather completed successfully","time":"2023-02-03T16:04:03Z"}
+{"level":"debug","msg":"Container test in pod launch-gather-must-gather completed successfully","time":"2023-02-03T16:05:13Z"}
+{"level":"debug","msg":"Container sidecar in pod launch-gather-must-gather completed successfully","time":"2023-02-03T16:05:23Z"}
+{"level":"debug","msg":"Pod launch-gather-must-gather succeeded after 1m26s","time":"2023-02-03T16:05:23Z"}
+{"level":"info","msg":"Step launch-gather-must-gather succeeded after 1m30s.","time":"2023-02-03T16:05:23Z"}
+{"level":"info","msg":"Running step launch-gather-extra.","time":"2023-02-03T16:05:23Z"}
+{"level":"debug","msg":"Executing pod \"launch-gather-extra\" running image \"stable:cli\"","time":"2023-02-03T16:05:23Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod launch-gather-extra completed successfully","time":"2023-02-03T16:05:33Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod launch-gather-extra completed successfully","time":"2023-02-03T16:05:33Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod launch-gather-extra completed successfully","time":"2023-02-03T16:05:33Z"}
+{"level":"debug","msg":"Container test in pod launch-gather-extra completed successfully","time":"2023-02-03T16:06:33Z"}
+{"level":"debug","msg":"Container sidecar in pod launch-gather-extra completed successfully","time":"2023-02-03T16:08:03Z"}
+{"level":"debug","msg":"Pod launch-gather-extra succeeded after 2m32s","time":"2023-02-03T16:08:03Z"}
+{"level":"info","msg":"Step launch-gather-extra succeeded after 2m40s.","time":"2023-02-03T16:08:03Z"}
+{"level":"info","msg":"Running step launch-gather-audit-logs.","time":"2023-02-03T16:08:03Z"}
+{"level":"debug","msg":"Executing pod \"launch-gather-audit-logs\" running image \"stable:cli\"","time":"2023-02-03T16:08:03Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod launch-gather-audit-logs completed successfully","time":"2023-02-03T16:08:13Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod launch-gather-audit-logs completed successfully","time":"2023-02-03T16:08:13Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod launch-gather-audit-logs completed successfully","time":"2023-02-03T16:08:13Z"}
+{"level":"debug","msg":"Container test in pod launch-gather-audit-logs completed successfully","time":"2023-02-03T16:08:33Z"}
+{"level":"debug","msg":"Container sidecar in pod launch-gather-audit-logs completed successfully","time":"2023-02-03T16:08:43Z"}
+{"level":"debug","msg":"Pod launch-gather-audit-logs succeeded after 32s","time":"2023-02-03T16:08:43Z"}
+{"level":"info","msg":"Step launch-gather-audit-logs succeeded after 40s.","time":"2023-02-03T16:08:43Z"}
+{"level":"info","msg":"Running step launch-ipi-deprovision-deprovision.","time":"2023-02-03T16:08:43Z"}
+{"level":"debug","msg":"Executing pod \"launch-ipi-deprovision-deprovision\" running image \"stable:installer\"","time":"2023-02-03T16:08:43Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod launch-ipi-deprovision-deprovision completed successfully","time":"2023-02-03T16:08:53Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod launch-ipi-deprovision-deprovision completed successfully","time":"2023-02-03T16:08:53Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod launch-ipi-deprovision-deprovision completed successfully","time":"2023-02-03T16:08:53Z"}
+{"level":"debug","msg":"Container sidecar in pod launch-ipi-deprovision-deprovision completed successfully","time":"2023-02-03T16:13:23Z"}
+{"level":"debug","msg":"Container test in pod launch-ipi-deprovision-deprovision completed successfully","time":"2023-02-03T16:13:23Z"}
+{"level":"debug","msg":"Pod launch-ipi-deprovision-deprovision succeeded after 4m32s","time":"2023-02-03T16:13:23Z"}
+{"level":"info","msg":"Step launch-ipi-deprovision-deprovision succeeded after 4m40s.","time":"2023-02-03T16:13:23Z"}
+{"level":"info","msg":"Step phase post succeeded after 9m50s.","time":"2023-02-03T16:13:23Z"}
+{"level":"info","msg":"Releasing leases for test launch","time":"2023-02-03T16:13:23Z"}
+{"level":"debug","msg":"Releasing lease for aws-2-quota-slice: us-east-1--aws-2-quota-slice-03","time":"2023-02-03T16:13:23Z"}
+{"level":"debug","msg":"No custom metadata found and prow metadata already exists. Not updating the metadata.","time":"2023-02-03T16:13:23Z"}
+{"level":"info","msg":"Ran for 3h39m15s","time":"2023-02-03T16:13:23Z"}

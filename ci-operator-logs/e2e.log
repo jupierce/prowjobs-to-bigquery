@@ -1,0 +1,245 @@
+{"level":"info","msg":"ci-operator version v20230203-c37de57c6","time":"2023-02-03T16:08:19Z"}
+{"level":"info","msg":"Loading configuration from https://config.ci.openshift.org for openshift/oc@master","time":"2023-02-03T16:08:19Z"}
+{"level":"debug","msg":"performing request method GET url https://config.ci.openshift.org/config?branch=master\u0026org=openshift\u0026repo=oc","time":"2023-02-03T16:08:19Z"}
+{"level":"info","msg":"Resolved source https://github.com/openshift/oc to master@8b3f6f90, merging: #1308 310a1cfc @openshift-bot","time":"2023-02-03T16:08:19Z"}
+{"level":"info","msg":"Building release initial from a snapshot of ocp/4.13","time":"2023-02-03T16:08:19Z"}
+{"level":"info","msg":"Building release latest from a snapshot of ocp/4.13","time":"2023-02-03T16:08:19Z"}
+{"level":"debug","msg":"Resolved openshift/release:rhel-8-release-golang-1.19-openshift-4.13 (root) to sha256:b4d63baaac622ca6ebbeee2c37180b10cee4bd1eee7b65dce8151608838ee6af.","time":"2023-02-03T16:08:19Z"}
+{"level":"debug","msg":"Resolved ocp/4.13:base (base_image: base) to sha256:3164d186f0b6a9e5ef1117aa2c266ba102b23e5a9dc51fb82eb9574bb147541c.","time":"2023-02-03T16:08:19Z"}
+{"level":"debug","msg":"Resolved ocp-kni/test:dev-scripts (base_image: dev-scripts) to sha256:c4bce0d876a8988933518265fee5803db3345af6746efc649350e20c09eadefd.","time":"2023-02-03T16:08:19Z"}
+{"level":"debug","msg":"Resolved ocp/4.13:must-gather (base_image: must-gather-base) to sha256:2201048c405c7530824feee73c38e387b8d0f34615ba3da93a08fdd60ac36076.","time":"2023-02-03T16:08:19Z"}
+{"level":"debug","msg":"Resolved ocp/builder:rhel-8-golang-1.19-openshift-4.13 (base_image: ocp_builder_rhel-8-golang-1.19-openshift-4.13) to sha256:02e32e78e953874a2e3064e50249ecf1cf59786e18559fa76bfb165364eec2ac.","time":"2023-02-03T16:08:19Z"}
+{"level":"debug","msg":"Resolved ocp/4.13:tests (base_image: tests-base) to sha256:4fce913b80b4460c0b3d43e1e1162e5c24a37efdace63d66f86b3d87e7043b9f.","time":"2023-02-03T16:08:19Z"}
+{"level":"debug","msg":"Resolved origin/centos:8 (test steps: ipi-conf) to sha256:a1801b843b1bfaf77c501e7a6d3f709401a1e0c83863037fa3aab063a7fdb9dc.","time":"2023-02-03T16:08:19Z"}
+{"level":"debug","msg":"Resolved ocp/4.12:upi-installer (test steps: ipi-conf-aws,ipi-conf-azure,ipi-conf-telemetry) to sha256:baa1805040926c13223057a6c2eeb05dac65b66cfecff19ed7527c7e038a5418.","time":"2023-02-03T16:08:19Z"}
+{"level":"debug","msg":"Resolved ocp/4.5:upi-installer (test steps: gather-aws-console) to sha256:62c3dd3bc7647a98c69cd3c042074b56377b5887138bbecb8bc273b190b61d3c.","time":"2023-02-03T16:08:19Z"}
+{"level":"debug","msg":"Resolved azure/ci-base:latest (test steps: gather-azure-cli) to sha256:000becc96a7f461752f1586c68d6adb6fb126cd8d7f86c0d15fa7c1cee0e3c97.","time":"2023-02-03T16:08:19Z"}
+{"level":"debug","msg":"Resolved ocp/cli-jq:latest (test steps: openshift-e2e-test-capabilities-check) to sha256:22a2dcb1a3ddeb23469bf08ec822bc963b97fc9e7a186eacce0f180dae328354.","time":"2023-02-03T16:08:19Z"}
+{"level":"trace","msg":"Using binary as hash: /usr/bin/ci-operator 1675386859 70924931","time":"2023-02-03T16:08:20Z"}
+{"level":"info","msg":"Using namespace https://console-openshift-console.apps.build03.ky4t.p1.openshiftapps.com/k8s/cluster/projects/ci-op-mcbkni6k","time":"2023-02-03T16:08:20Z"}
+{"level":"info","msg":"Running [input:root], [input:base], [input:must-gather-base], [input:ocp_builder_rhel-8-golang-1.19-openshift-4.13], [input:tests-base], [input:origin-centos-8], [input:ocp-4.12-upi-installer], [input:azure-ci-base-latest], [release-inputs:initial], [release-inputs:latest], src, cli, must-gather, tests, cli-artifacts, [output:stable:cli], [output:stable:tests], [output:stable:must-gather], [output:stable:cli-artifacts], tools, deployer, recycler, [output:stable:tools], [output:stable:deployer], [output:stable:recycler], [images], [release:latest], e2e-agnostic-ovn-cmd","time":"2023-02-03T16:08:20Z"}
+{"level":"debug","msg":"Creating namespace ci-op-mcbkni6k","time":"2023-02-03T16:08:20Z"}
+{"level":"debug","msg":"Spent 1.971862ms waiting for RBAC to initialize in the new namespace.","time":"2023-02-03T16:08:20Z"}
+{"level":"debug","msg":"[0/120] Image pull secrets in namespace not yet ready, sleeping for a second...","time":"2023-02-03T16:08:20Z"}
+{"level":"debug","msg":"Spent 1.021796548s waiting for image pull secrets to initialize in the new namespace.","time":"2023-02-03T16:08:21Z"}
+{"authors":["openshift-bot"],"level":"debug","msg":"Creating ci-op-author-access rolebinding in namespace ci-op-mcbkni6k","time":"2023-02-03T16:08:21Z"}
+{"level":"debug","msg":"Setting up pipeline ImageStream for the test","time":"2023-02-03T16:08:21Z"}
+{"level":"debug","msg":"Created secret ci-pull-credentials","time":"2023-02-03T16:08:21Z"}
+{"level":"debug","msg":"Created secret e2e-agnostic-ovn-cmd-cluster-profile","time":"2023-02-03T16:08:21Z"}
+{"level":"debug","msg":"Created PDB for pods with openshift.io/build.name label","time":"2023-02-03T16:08:21Z"}
+{"level":"debug","msg":"Created PDB for pods with created-by-ci label","time":"2023-02-03T16:08:21Z"}
+{"level":"info","msg":"Tagging ocp/4.13:must-gather into pipeline:must-gather-base.","time":"2023-02-03T16:08:21Z"}
+{"level":"info","msg":"Tagging origin/centos:8 into pipeline:origin-centos-8.","time":"2023-02-03T16:08:21Z"}
+{"level":"info","msg":"Tagging openshift/release:rhel-8-release-golang-1.19-openshift-4.13 into pipeline:root.","time":"2023-02-03T16:08:21Z"}
+{"level":"info","msg":"Tagging ocp/4.13:tests into pipeline:tests-base.","time":"2023-02-03T16:08:21Z"}
+{"level":"info","msg":"Tagging ocp/4.12:upi-installer into pipeline:ocp-4.12-upi-installer.","time":"2023-02-03T16:08:21Z"}
+{"level":"info","msg":"Tagging ocp/builder:rhel-8-golang-1.19-openshift-4.13 into pipeline:ocp_builder_rhel-8-golang-1.19-openshift-4.13.","time":"2023-02-03T16:08:21Z"}
+{"level":"info","msg":"Tagging azure/ci-base:latest into pipeline:azure-ci-base-latest.","time":"2023-02-03T16:08:21Z"}
+{"level":"info","msg":"Tagging ocp/4.13:base into pipeline:base.","time":"2023-02-03T16:08:21Z"}
+{"level":"info","msg":"Building src","time":"2023-02-03T16:08:21Z"}
+{"level":"trace","msg":"Waiting for build to be complete.","name":"src","namespace":"ci-op-mcbkni6k","time":"2023-02-03T16:08:22Z"}
+{"level":"info","msg":"Build src succeeded after 1m19s","time":"2023-02-03T16:09:40Z"}
+{"level":"info","msg":"Building tests","time":"2023-02-03T16:09:40Z"}
+{"level":"info","msg":"Building must-gather","time":"2023-02-03T16:09:40Z"}
+{"level":"info","msg":"Building cli","time":"2023-02-03T16:09:40Z"}
+{"level":"trace","msg":"Waiting for build to be complete.","name":"must-gather","namespace":"ci-op-mcbkni6k","time":"2023-02-03T16:09:40Z"}
+{"level":"trace","msg":"Waiting for build to be complete.","name":"tests","namespace":"ci-op-mcbkni6k","time":"2023-02-03T16:09:40Z"}
+{"level":"trace","msg":"Waiting for build to be complete.","name":"cli","namespace":"ci-op-mcbkni6k","time":"2023-02-03T16:09:40Z"}
+{"level":"info","msg":"Build must-gather succeeded after 3m48s","time":"2023-02-03T16:13:28Z"}
+{"level":"info","msg":"Tagging must-gather into stable","time":"2023-02-03T16:13:28Z"}
+{"level":"info","msg":"Build tests succeeded after 3m22s","time":"2023-02-03T16:15:04Z"}
+{"level":"info","msg":"Tagging tests into stable","time":"2023-02-03T16:15:04Z"}
+{"level":"info","msg":"Build cli succeeded after 5m9s","time":"2023-02-03T16:17:31Z"}
+{"level":"info","msg":"Tagging cli into stable","time":"2023-02-03T16:17:31Z"}
+{"level":"info","msg":"Building recycler","time":"2023-02-03T16:17:31Z"}
+{"level":"info","msg":"Building tools","time":"2023-02-03T16:17:31Z"}
+{"level":"info","msg":"Building deployer","time":"2023-02-03T16:17:31Z"}
+{"level":"info","msg":"Building cli-artifacts","time":"2023-02-03T16:17:31Z"}
+{"level":"trace","msg":"Waiting for build to be complete.","name":"tools","namespace":"ci-op-mcbkni6k","time":"2023-02-03T16:17:31Z"}
+{"level":"trace","msg":"Waiting for build to be complete.","name":"recycler","namespace":"ci-op-mcbkni6k","time":"2023-02-03T16:17:31Z"}
+{"level":"trace","msg":"Waiting for build to be complete.","name":"deployer","namespace":"ci-op-mcbkni6k","time":"2023-02-03T16:17:31Z"}
+{"level":"trace","msg":"Waiting for build to be complete.","name":"cli-artifacts","namespace":"ci-op-mcbkni6k","time":"2023-02-03T16:17:31Z"}
+{"level":"info","msg":"Build deployer succeeded after 1m16s","time":"2023-02-03T16:18:47Z"}
+{"level":"info","msg":"Tagging deployer into stable","time":"2023-02-03T16:18:47Z"}
+{"level":"info","msg":"Build recycler succeeded after 1m52s","time":"2023-02-03T16:19:23Z"}
+{"level":"info","msg":"Tagging recycler into stable","time":"2023-02-03T16:19:23Z"}
+{"level":"info","msg":"Build tools succeeded after 3m50s","time":"2023-02-03T16:21:21Z"}
+{"level":"info","msg":"Tagging tools into stable","time":"2023-02-03T16:21:21Z"}
+{"level":"info","msg":"Build cli-artifacts succeeded after 6m54s","time":"2023-02-03T16:25:27Z"}
+{"level":"info","msg":"Tagging cli-artifacts into stable","time":"2023-02-03T16:25:27Z"}
+{"level":"info","msg":"Creating release image registry.build03.ci.openshift.org/ci-op-mcbkni6k/release:latest.","time":"2023-02-03T16:25:28Z"}
+{"level":"debug","msg":"Executing pod \"release-latest\" running image \"stable:cli\"","time":"2023-02-03T16:25:28Z"}
+{"level":"info","msg":"Snapshot integration stream into release 4.13.0-0.ci.test-2023-02-03-162528-ci-op-mcbkni6k-latest to tag release:latest ","time":"2023-02-03T16:26:48Z"}
+{"level":"info","msg":"Acquiring leases for test e2e-agnostic-ovn-cmd: [azure4-quota-slice]","time":"2023-02-03T16:26:48Z"}
+{"level":"debug","msg":"Acquiring 1 lease(s) for azure4-quota-slice","time":"2023-02-03T16:26:48Z"}
+{"level":"info","msg":"Acquired 1 lease(s) for azure4-quota-slice: [westus--azure4-quota-slice-4]","time":"2023-02-03T16:26:49Z"}
+{"level":"info","msg":"Running multi-stage test e2e-agnostic-ovn-cmd","time":"2023-02-03T16:26:49Z"}
+{"level":"debug","msg":"Creating multi-stage test shared directory \"e2e-agnostic-ovn-cmd\"","time":"2023-02-03T16:26:49Z"}
+{"level":"debug","msg":"Creating multi-stage test credentials for \"e2e-agnostic-ovn-cmd\"","time":"2023-02-03T16:26:49Z"}
+{"level":"debug","msg":"Creating multi-stage test commands configmap for \"e2e-agnostic-ovn-cmd\"","time":"2023-02-03T16:26:49Z"}
+{"level":"info","msg":"Running multi-stage phase pre","time":"2023-02-03T16:26:49Z"}
+{"level":"info","msg":"Running step e2e-agnostic-ovn-cmd-ipi-conf.","time":"2023-02-03T16:26:49Z"}
+{"level":"debug","msg":"Executing pod \"e2e-agnostic-ovn-cmd-ipi-conf\" running image \"pipeline:origin-centos-8\"","time":"2023-02-03T16:26:49Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod e2e-agnostic-ovn-cmd-ipi-conf completed successfully","time":"2023-02-03T16:26:59Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod e2e-agnostic-ovn-cmd-ipi-conf completed successfully","time":"2023-02-03T16:26:59Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod e2e-agnostic-ovn-cmd-ipi-conf completed successfully","time":"2023-02-03T16:26:59Z"}
+{"level":"debug","msg":"Container sidecar in pod e2e-agnostic-ovn-cmd-ipi-conf completed successfully","time":"2023-02-03T16:26:59Z"}
+{"level":"debug","msg":"Container test in pod e2e-agnostic-ovn-cmd-ipi-conf completed successfully","time":"2023-02-03T16:26:59Z"}
+{"level":"debug","msg":"Pod e2e-agnostic-ovn-cmd-ipi-conf succeeded after 7s","time":"2023-02-03T16:26:59Z"}
+{"level":"info","msg":"Step e2e-agnostic-ovn-cmd-ipi-conf succeeded after 10s.","time":"2023-02-03T16:26:59Z"}
+{"level":"info","msg":"Running step e2e-agnostic-ovn-cmd-ipi-conf-telemetry.","time":"2023-02-03T16:26:59Z"}
+{"level":"debug","msg":"Executing pod \"e2e-agnostic-ovn-cmd-ipi-conf-telemetry\" running image \"pipeline:ocp-4.12-upi-installer\"","time":"2023-02-03T16:26:59Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod e2e-agnostic-ovn-cmd-ipi-conf-telemetry completed successfully","time":"2023-02-03T16:27:09Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod e2e-agnostic-ovn-cmd-ipi-conf-telemetry completed successfully","time":"2023-02-03T16:27:09Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod e2e-agnostic-ovn-cmd-ipi-conf-telemetry completed successfully","time":"2023-02-03T16:27:09Z"}
+{"level":"debug","msg":"Container sidecar in pod e2e-agnostic-ovn-cmd-ipi-conf-telemetry completed successfully","time":"2023-02-03T16:27:09Z"}
+{"level":"debug","msg":"Container test in pod e2e-agnostic-ovn-cmd-ipi-conf-telemetry completed successfully","time":"2023-02-03T16:27:09Z"}
+{"level":"debug","msg":"Pod e2e-agnostic-ovn-cmd-ipi-conf-telemetry succeeded after 7s","time":"2023-02-03T16:27:09Z"}
+{"level":"info","msg":"Step e2e-agnostic-ovn-cmd-ipi-conf-telemetry succeeded after 10s.","time":"2023-02-03T16:27:09Z"}
+{"level":"info","msg":"Running step e2e-agnostic-ovn-cmd-ipi-conf-azure.","time":"2023-02-03T16:27:09Z"}
+{"level":"debug","msg":"Executing pod \"e2e-agnostic-ovn-cmd-ipi-conf-azure\" running image \"pipeline:ocp-4.12-upi-installer\"","time":"2023-02-03T16:27:09Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod e2e-agnostic-ovn-cmd-ipi-conf-azure completed successfully","time":"2023-02-03T16:27:19Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod e2e-agnostic-ovn-cmd-ipi-conf-azure completed successfully","time":"2023-02-03T16:27:19Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod e2e-agnostic-ovn-cmd-ipi-conf-azure completed successfully","time":"2023-02-03T16:27:19Z"}
+{"level":"debug","msg":"Container inject-cli in pod e2e-agnostic-ovn-cmd-ipi-conf-azure completed successfully","time":"2023-02-03T16:27:19Z"}
+{"level":"debug","msg":"Container test in pod e2e-agnostic-ovn-cmd-ipi-conf-azure completed successfully","time":"2023-02-03T16:27:19Z"}
+{"level":"debug","msg":"Container sidecar in pod e2e-agnostic-ovn-cmd-ipi-conf-azure completed successfully","time":"2023-02-03T16:27:29Z"}
+{"level":"debug","msg":"Pod e2e-agnostic-ovn-cmd-ipi-conf-azure succeeded after 10s","time":"2023-02-03T16:27:29Z"}
+{"level":"info","msg":"Step e2e-agnostic-ovn-cmd-ipi-conf-azure succeeded after 20s.","time":"2023-02-03T16:27:29Z"}
+{"level":"info","msg":"Running step e2e-agnostic-ovn-cmd-ipi-install-monitoringpvc.","time":"2023-02-03T16:27:29Z"}
+{"level":"debug","msg":"Executing pod \"e2e-agnostic-ovn-cmd-ipi-install-monitoringpvc\" running image \"pipeline:cli\"","time":"2023-02-03T16:27:29Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod e2e-agnostic-ovn-cmd-ipi-install-monitoringpvc completed successfully","time":"2023-02-03T16:27:39Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod e2e-agnostic-ovn-cmd-ipi-install-monitoringpvc completed successfully","time":"2023-02-03T16:27:39Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod e2e-agnostic-ovn-cmd-ipi-install-monitoringpvc completed successfully","time":"2023-02-03T16:27:39Z"}
+{"level":"debug","msg":"Container sidecar in pod e2e-agnostic-ovn-cmd-ipi-install-monitoringpvc completed successfully","time":"2023-02-03T16:27:49Z"}
+{"level":"debug","msg":"Container test in pod e2e-agnostic-ovn-cmd-ipi-install-monitoringpvc completed successfully","time":"2023-02-03T16:27:49Z"}
+{"level":"debug","msg":"Pod e2e-agnostic-ovn-cmd-ipi-install-monitoringpvc succeeded after 11s","time":"2023-02-03T16:27:49Z"}
+{"level":"info","msg":"Step e2e-agnostic-ovn-cmd-ipi-install-monitoringpvc succeeded after 20s.","time":"2023-02-03T16:27:49Z"}
+{"level":"info","msg":"Running step e2e-agnostic-ovn-cmd-ipi-install-rbac.","time":"2023-02-03T16:27:49Z"}
+{"level":"debug","msg":"Executing pod \"e2e-agnostic-ovn-cmd-ipi-install-rbac\" running image \"pipeline:cli\"","time":"2023-02-03T16:27:49Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod e2e-agnostic-ovn-cmd-ipi-install-rbac completed successfully","time":"2023-02-03T16:27:59Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod e2e-agnostic-ovn-cmd-ipi-install-rbac completed successfully","time":"2023-02-03T16:27:59Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod e2e-agnostic-ovn-cmd-ipi-install-rbac completed successfully","time":"2023-02-03T16:27:59Z"}
+{"level":"debug","msg":"Container test in pod e2e-agnostic-ovn-cmd-ipi-install-rbac completed successfully","time":"2023-02-03T16:27:59Z"}
+{"level":"debug","msg":"Container sidecar in pod e2e-agnostic-ovn-cmd-ipi-install-rbac completed successfully","time":"2023-02-03T16:28:09Z"}
+{"level":"debug","msg":"Pod e2e-agnostic-ovn-cmd-ipi-install-rbac succeeded after 10s","time":"2023-02-03T16:28:09Z"}
+{"level":"info","msg":"Step e2e-agnostic-ovn-cmd-ipi-install-rbac succeeded after 20s.","time":"2023-02-03T16:28:09Z"}
+{"level":"info","msg":"Running step e2e-agnostic-ovn-cmd-openshift-cluster-bot-rbac.","time":"2023-02-03T16:28:09Z"}
+{"level":"debug","msg":"Executing pod \"e2e-agnostic-ovn-cmd-openshift-cluster-bot-rbac\" running image \"pipeline:cli\"","time":"2023-02-03T16:28:09Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod e2e-agnostic-ovn-cmd-openshift-cluster-bot-rbac completed successfully","time":"2023-02-03T16:28:19Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod e2e-agnostic-ovn-cmd-openshift-cluster-bot-rbac completed successfully","time":"2023-02-03T16:28:19Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod e2e-agnostic-ovn-cmd-openshift-cluster-bot-rbac completed successfully","time":"2023-02-03T16:28:19Z"}
+{"level":"debug","msg":"Container sidecar in pod e2e-agnostic-ovn-cmd-openshift-cluster-bot-rbac completed successfully","time":"2023-02-03T16:28:29Z"}
+{"level":"debug","msg":"Container test in pod e2e-agnostic-ovn-cmd-openshift-cluster-bot-rbac completed successfully","time":"2023-02-03T16:28:29Z"}
+{"level":"debug","msg":"Pod e2e-agnostic-ovn-cmd-openshift-cluster-bot-rbac succeeded after 13s","time":"2023-02-03T16:28:29Z"}
+{"level":"info","msg":"Step e2e-agnostic-ovn-cmd-openshift-cluster-bot-rbac succeeded after 20s.","time":"2023-02-03T16:28:29Z"}
+{"level":"info","msg":"Running step e2e-agnostic-ovn-cmd-ipi-install-hosted-loki.","time":"2023-02-03T16:28:29Z"}
+{"level":"debug","msg":"Executing pod \"e2e-agnostic-ovn-cmd-ipi-install-hosted-loki\" running image \"pipeline:cli\"","time":"2023-02-03T16:28:29Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod e2e-agnostic-ovn-cmd-ipi-install-hosted-loki completed successfully","time":"2023-02-03T16:28:39Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod e2e-agnostic-ovn-cmd-ipi-install-hosted-loki completed successfully","time":"2023-02-03T16:28:39Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod e2e-agnostic-ovn-cmd-ipi-install-hosted-loki completed successfully","time":"2023-02-03T16:28:39Z"}
+{"level":"debug","msg":"Container sidecar in pod e2e-agnostic-ovn-cmd-ipi-install-hosted-loki completed successfully","time":"2023-02-03T16:28:49Z"}
+{"level":"debug","msg":"Container test in pod e2e-agnostic-ovn-cmd-ipi-install-hosted-loki completed successfully","time":"2023-02-03T16:28:49Z"}
+{"level":"debug","msg":"Pod e2e-agnostic-ovn-cmd-ipi-install-hosted-loki succeeded after 11s","time":"2023-02-03T16:28:49Z"}
+{"level":"info","msg":"Step e2e-agnostic-ovn-cmd-ipi-install-hosted-loki succeeded after 20s.","time":"2023-02-03T16:28:49Z"}
+{"level":"info","msg":"Running step e2e-agnostic-ovn-cmd-ipi-install-install.","time":"2023-02-03T16:28:49Z"}
+{"level":"debug","msg":"Executing pod \"e2e-agnostic-ovn-cmd-ipi-install-install\" running image \"stable:installer\"","time":"2023-02-03T16:28:49Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod e2e-agnostic-ovn-cmd-ipi-install-install completed successfully","time":"2023-02-03T16:28:59Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod e2e-agnostic-ovn-cmd-ipi-install-install completed successfully","time":"2023-02-03T16:28:59Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod e2e-agnostic-ovn-cmd-ipi-install-install completed successfully","time":"2023-02-03T16:28:59Z"}
+{"level":"debug","msg":"Container inject-cli in pod e2e-agnostic-ovn-cmd-ipi-install-install completed successfully","time":"2023-02-03T16:28:59Z"}
+{"level":"debug","msg":"Container sidecar in pod e2e-agnostic-ovn-cmd-ipi-install-install completed successfully","time":"2023-02-03T17:19:19Z"}
+{"level":"debug","msg":"Container test in pod e2e-agnostic-ovn-cmd-ipi-install-install completed successfully","time":"2023-02-03T17:19:19Z"}
+{"level":"debug","msg":"Pod e2e-agnostic-ovn-cmd-ipi-install-install succeeded after 50m21s","time":"2023-02-03T17:19:19Z"}
+{"level":"info","msg":"Step e2e-agnostic-ovn-cmd-ipi-install-install succeeded after 50m30s.","time":"2023-02-03T17:19:19Z"}
+{"level":"info","msg":"Running step e2e-agnostic-ovn-cmd-ipi-install-times-collection.","time":"2023-02-03T17:19:19Z"}
+{"level":"debug","msg":"Executing pod \"e2e-agnostic-ovn-cmd-ipi-install-times-collection\" running image \"pipeline:cli\"","time":"2023-02-03T17:19:19Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod e2e-agnostic-ovn-cmd-ipi-install-times-collection completed successfully","time":"2023-02-03T17:19:29Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod e2e-agnostic-ovn-cmd-ipi-install-times-collection completed successfully","time":"2023-02-03T17:19:29Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod e2e-agnostic-ovn-cmd-ipi-install-times-collection completed successfully","time":"2023-02-03T17:19:29Z"}
+{"level":"debug","msg":"Container sidecar in pod e2e-agnostic-ovn-cmd-ipi-install-times-collection completed successfully","time":"2023-02-03T17:19:39Z"}
+{"level":"debug","msg":"Container test in pod e2e-agnostic-ovn-cmd-ipi-install-times-collection completed successfully","time":"2023-02-03T17:19:39Z"}
+{"level":"debug","msg":"Pod e2e-agnostic-ovn-cmd-ipi-install-times-collection succeeded after 11s","time":"2023-02-03T17:19:39Z"}
+{"level":"info","msg":"Step e2e-agnostic-ovn-cmd-ipi-install-times-collection succeeded after 20s.","time":"2023-02-03T17:19:39Z"}
+{"level":"info","msg":"Running step e2e-agnostic-ovn-cmd-ipi-azure-rbac.","time":"2023-02-03T17:19:39Z"}
+{"level":"debug","msg":"Executing pod \"e2e-agnostic-ovn-cmd-ipi-azure-rbac\" running image \"pipeline:cli\"","time":"2023-02-03T17:19:39Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod e2e-agnostic-ovn-cmd-ipi-azure-rbac completed successfully","time":"2023-02-03T17:19:50Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod e2e-agnostic-ovn-cmd-ipi-azure-rbac completed successfully","time":"2023-02-03T17:19:50Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod e2e-agnostic-ovn-cmd-ipi-azure-rbac completed successfully","time":"2023-02-03T17:19:50Z"}
+{"level":"debug","msg":"Container sidecar in pod e2e-agnostic-ovn-cmd-ipi-azure-rbac completed successfully","time":"2023-02-03T17:20:00Z"}
+{"level":"debug","msg":"Container test in pod e2e-agnostic-ovn-cmd-ipi-azure-rbac completed successfully","time":"2023-02-03T17:20:00Z"}
+{"level":"debug","msg":"Pod e2e-agnostic-ovn-cmd-ipi-azure-rbac succeeded after 12s","time":"2023-02-03T17:20:00Z"}
+{"level":"info","msg":"Step e2e-agnostic-ovn-cmd-ipi-azure-rbac succeeded after 20s.","time":"2023-02-03T17:20:00Z"}
+{"level":"info","msg":"Step phase pre succeeded after 53m10s.","time":"2023-02-03T17:20:00Z"}
+{"level":"info","msg":"Running multi-stage phase test","time":"2023-02-03T17:20:00Z"}
+{"level":"info","msg":"Running step e2e-agnostic-ovn-cmd-openshift-e2e-test.","time":"2023-02-03T17:20:00Z"}
+{"level":"debug","msg":"Executing pod \"e2e-agnostic-ovn-cmd-openshift-e2e-test\" running image \"pipeline:tests\"","time":"2023-02-03T17:20:00Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod e2e-agnostic-ovn-cmd-openshift-e2e-test completed successfully","time":"2023-02-03T17:20:10Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod e2e-agnostic-ovn-cmd-openshift-e2e-test completed successfully","time":"2023-02-03T17:20:10Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod e2e-agnostic-ovn-cmd-openshift-e2e-test completed successfully","time":"2023-02-03T17:20:10Z"}
+{"level":"debug","msg":"Container sidecar in pod e2e-agnostic-ovn-cmd-openshift-e2e-test completed successfully","time":"2023-02-03T17:31:30Z"}
+{"level":"debug","msg":"Container test in pod e2e-agnostic-ovn-cmd-openshift-e2e-test completed successfully","time":"2023-02-03T17:31:30Z"}
+{"level":"debug","msg":"Pod e2e-agnostic-ovn-cmd-openshift-e2e-test succeeded after 11m23s","time":"2023-02-03T17:31:30Z"}
+{"level":"info","msg":"Step e2e-agnostic-ovn-cmd-openshift-e2e-test succeeded after 11m30s.","time":"2023-02-03T17:31:30Z"}
+{"level":"info","msg":"Step phase test succeeded after 11m30s.","time":"2023-02-03T17:31:30Z"}
+{"level":"info","msg":"Running multi-stage phase post","time":"2023-02-03T17:31:30Z"}
+{"level":"info","msg":"Running step e2e-agnostic-ovn-cmd-gather-core-dump.","time":"2023-02-03T17:31:30Z"}
+{"level":"debug","msg":"Executing pod \"e2e-agnostic-ovn-cmd-gather-core-dump\" running image \"pipeline:cli\"","time":"2023-02-03T17:31:30Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod e2e-agnostic-ovn-cmd-gather-core-dump completed successfully","time":"2023-02-03T17:31:40Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod e2e-agnostic-ovn-cmd-gather-core-dump completed successfully","time":"2023-02-03T17:31:40Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod e2e-agnostic-ovn-cmd-gather-core-dump completed successfully","time":"2023-02-03T17:31:40Z"}
+{"level":"debug","msg":"Container sidecar in pod e2e-agnostic-ovn-cmd-gather-core-dump completed successfully","time":"2023-02-03T17:32:00Z"}
+{"level":"debug","msg":"Container test in pod e2e-agnostic-ovn-cmd-gather-core-dump completed successfully","time":"2023-02-03T17:32:00Z"}
+{"level":"debug","msg":"Pod e2e-agnostic-ovn-cmd-gather-core-dump succeeded after 21s","time":"2023-02-03T17:32:00Z"}
+{"level":"info","msg":"Step e2e-agnostic-ovn-cmd-gather-core-dump succeeded after 30s.","time":"2023-02-03T17:32:00Z"}
+{"level":"info","msg":"Running step e2e-agnostic-ovn-cmd-gather-azure-cli.","time":"2023-02-03T17:32:00Z"}
+{"level":"debug","msg":"Executing pod \"e2e-agnostic-ovn-cmd-gather-azure-cli\" running image \"pipeline:azure-ci-base-latest\"","time":"2023-02-03T17:32:00Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod e2e-agnostic-ovn-cmd-gather-azure-cli completed successfully","time":"2023-02-03T17:32:10Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod e2e-agnostic-ovn-cmd-gather-azure-cli completed successfully","time":"2023-02-03T17:32:10Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod e2e-agnostic-ovn-cmd-gather-azure-cli completed successfully","time":"2023-02-03T17:32:10Z"}
+{"level":"debug","msg":"Container sidecar in pod e2e-agnostic-ovn-cmd-gather-azure-cli completed successfully","time":"2023-02-03T17:32:50Z"}
+{"level":"debug","msg":"Container test in pod e2e-agnostic-ovn-cmd-gather-azure-cli completed successfully","time":"2023-02-03T17:32:50Z"}
+{"level":"debug","msg":"Pod e2e-agnostic-ovn-cmd-gather-azure-cli succeeded after 48s","time":"2023-02-03T17:32:50Z"}
+{"level":"info","msg":"Step e2e-agnostic-ovn-cmd-gather-azure-cli succeeded after 50s.","time":"2023-02-03T17:32:50Z"}
+{"level":"info","msg":"Running step e2e-agnostic-ovn-cmd-gather-must-gather.","time":"2023-02-03T17:32:50Z"}
+{"level":"debug","msg":"Executing pod \"e2e-agnostic-ovn-cmd-gather-must-gather\" running image \"pipeline:cli\"","time":"2023-02-03T17:32:50Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod e2e-agnostic-ovn-cmd-gather-must-gather completed successfully","time":"2023-02-03T17:33:00Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod e2e-agnostic-ovn-cmd-gather-must-gather completed successfully","time":"2023-02-03T17:33:00Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod e2e-agnostic-ovn-cmd-gather-must-gather completed successfully","time":"2023-02-03T17:33:00Z"}
+{"level":"debug","msg":"Container test in pod e2e-agnostic-ovn-cmd-gather-must-gather completed successfully","time":"2023-02-03T17:35:00Z"}
+{"level":"debug","msg":"Container sidecar in pod e2e-agnostic-ovn-cmd-gather-must-gather completed successfully","time":"2023-02-03T17:35:20Z"}
+{"level":"debug","msg":"Pod e2e-agnostic-ovn-cmd-gather-must-gather succeeded after 2m21s","time":"2023-02-03T17:35:20Z"}
+{"level":"info","msg":"Step e2e-agnostic-ovn-cmd-gather-must-gather succeeded after 2m30s.","time":"2023-02-03T17:35:20Z"}
+{"level":"info","msg":"Running step e2e-agnostic-ovn-cmd-gather-extra.","time":"2023-02-03T17:35:20Z"}
+{"level":"debug","msg":"Executing pod \"e2e-agnostic-ovn-cmd-gather-extra\" running image \"pipeline:cli\"","time":"2023-02-03T17:35:20Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod e2e-agnostic-ovn-cmd-gather-extra completed successfully","time":"2023-02-03T17:35:30Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod e2e-agnostic-ovn-cmd-gather-extra completed successfully","time":"2023-02-03T17:35:30Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod e2e-agnostic-ovn-cmd-gather-extra completed successfully","time":"2023-02-03T17:35:30Z"}
+{"level":"debug","msg":"Container test in pod e2e-agnostic-ovn-cmd-gather-extra completed successfully","time":"2023-02-03T17:37:00Z"}
+{"level":"debug","msg":"Container sidecar in pod e2e-agnostic-ovn-cmd-gather-extra completed successfully","time":"2023-02-03T17:38:00Z"}
+{"level":"debug","msg":"Pod e2e-agnostic-ovn-cmd-gather-extra succeeded after 2m37s","time":"2023-02-03T17:38:00Z"}
+{"level":"info","msg":"Step e2e-agnostic-ovn-cmd-gather-extra succeeded after 2m40s.","time":"2023-02-03T17:38:00Z"}
+{"level":"info","msg":"Running step e2e-agnostic-ovn-cmd-gather-audit-logs.","time":"2023-02-03T17:38:00Z"}
+{"level":"debug","msg":"Executing pod \"e2e-agnostic-ovn-cmd-gather-audit-logs\" running image \"pipeline:cli\"","time":"2023-02-03T17:38:00Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod e2e-agnostic-ovn-cmd-gather-audit-logs completed successfully","time":"2023-02-03T17:38:10Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod e2e-agnostic-ovn-cmd-gather-audit-logs completed successfully","time":"2023-02-03T17:38:10Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod e2e-agnostic-ovn-cmd-gather-audit-logs completed successfully","time":"2023-02-03T17:38:10Z"}
+{"level":"debug","msg":"Container sidecar in pod e2e-agnostic-ovn-cmd-gather-audit-logs completed successfully","time":"2023-02-03T17:38:30Z"}
+{"level":"debug","msg":"Container test in pod e2e-agnostic-ovn-cmd-gather-audit-logs completed successfully","time":"2023-02-03T17:38:30Z"}
+{"level":"debug","msg":"Pod e2e-agnostic-ovn-cmd-gather-audit-logs succeeded after 26s","time":"2023-02-03T17:38:30Z"}
+{"level":"info","msg":"Step e2e-agnostic-ovn-cmd-gather-audit-logs succeeded after 30s.","time":"2023-02-03T17:38:30Z"}
+{"level":"info","msg":"Running step e2e-agnostic-ovn-cmd-ipi-deprovision-deprovision.","time":"2023-02-03T17:38:30Z"}
+{"level":"debug","msg":"Executing pod \"e2e-agnostic-ovn-cmd-ipi-deprovision-deprovision\" running image \"stable:installer\"","time":"2023-02-03T17:38:30Z"}
+{"level":"debug","msg":"Container ci-scheduling-dns-wait in pod e2e-agnostic-ovn-cmd-ipi-deprovision-deprovision completed successfully","time":"2023-02-03T17:38:40Z"}
+{"level":"debug","msg":"Container place-entrypoint in pod e2e-agnostic-ovn-cmd-ipi-deprovision-deprovision completed successfully","time":"2023-02-03T17:38:40Z"}
+{"level":"debug","msg":"Container cp-entrypoint-wrapper in pod e2e-agnostic-ovn-cmd-ipi-deprovision-deprovision completed successfully","time":"2023-02-03T17:38:40Z"}
+{"level":"debug","msg":"Container sidecar in pod e2e-agnostic-ovn-cmd-ipi-deprovision-deprovision completed successfully","time":"2023-02-03T17:48:00Z"}
+{"level":"debug","msg":"Container test in pod e2e-agnostic-ovn-cmd-ipi-deprovision-deprovision completed successfully","time":"2023-02-03T17:48:00Z"}
+{"level":"debug","msg":"Pod e2e-agnostic-ovn-cmd-ipi-deprovision-deprovision succeeded after 9m28s","time":"2023-02-03T17:48:00Z"}
+{"level":"info","msg":"Step e2e-agnostic-ovn-cmd-ipi-deprovision-deprovision succeeded after 9m30s.","time":"2023-02-03T17:48:00Z"}
+{"level":"info","msg":"Step phase post succeeded after 16m30s.","time":"2023-02-03T17:48:00Z"}
+{"level":"info","msg":"Releasing leases for test e2e-agnostic-ovn-cmd","time":"2023-02-03T17:48:00Z"}
+{"level":"debug","msg":"Releasing lease for azure4-quota-slice: westus--azure4-quota-slice-4","time":"2023-02-03T17:48:00Z"}
+{"level":"debug","msg":"No custom metadata found and prow metadata already exists. Not updating the metadata.","time":"2023-02-03T17:48:00Z"}
+{"level":"info","msg":"Ran for 1h39m41s","time":"2023-02-03T17:48:00Z"}
+{"level":"info","msg":"Reporting job state 'succeeded'","time":"2023-02-03T17:48:00Z"}

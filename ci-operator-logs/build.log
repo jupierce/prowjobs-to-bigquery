@@ -1,0 +1,38 @@
+{"level":"info","msg":"ci-operator version v20230203-c37de57c6","time":"2023-02-03T13:33:30Z"}
+{"level":"info","msg":"Loading configuration from https://config.ci.openshift.org for openshift/aws-ebs-csi-driver@master","time":"2023-02-03T13:33:30Z"}
+{"level":"debug","msg":"performing request method GET url https://config.ci.openshift.org/config?branch=master\u0026org=openshift\u0026repo=aws-ebs-csi-driver","time":"2023-02-03T13:33:30Z"}
+{"level":"info","msg":"Resolved source https://github.com/openshift/aws-ebs-csi-driver to master@7f2b967f, merging: #215 4a517208 @RomanBednar","time":"2023-02-03T13:33:30Z"}
+{"level":"info","msg":"Building release latest from a snapshot of ocp/4.13","time":"2023-02-03T13:33:30Z"}
+{"level":"info","msg":"Building release initial from a snapshot of ocp/4.13","time":"2023-02-03T13:33:30Z"}
+{"level":"debug","msg":"Resolved openshift/release:rhel-8-release-golang-1.19-openshift-4.13 (root) to sha256:b4d63baaac622ca6ebbeee2c37180b10cee4bd1eee7b65dce8151608838ee6af.","time":"2023-02-03T13:33:30Z"}
+{"level":"debug","msg":"Resolved ocp/4.13:base (base_image: base) to sha256:3164d186f0b6a9e5ef1117aa2c266ba102b23e5a9dc51fb82eb9574bb147541c.","time":"2023-02-03T13:33:30Z"}
+{"level":"debug","msg":"Resolved ocp/builder:rhel-8-golang-1.19-openshift-4.13 (base_image: ocp_builder_rhel-8-golang-1.19-openshift-4.13) to sha256:02e32e78e953874a2e3064e50249ecf1cf59786e18559fa76bfb165364eec2ac.","time":"2023-02-03T13:33:30Z"}
+{"level":"debug","msg":"Resolved origin/centos:8 (test steps: ipi-conf) to sha256:a1801b843b1bfaf77c501e7a6d3f709401a1e0c83863037fa3aab063a7fdb9dc.","time":"2023-02-03T13:33:30Z"}
+{"level":"debug","msg":"Resolved ocp/4.12:upi-installer (test steps: ipi-conf-aws,ipi-conf-telemetry) to sha256:baa1805040926c13223057a6c2eeb05dac65b66cfecff19ed7527c7e038a5418.","time":"2023-02-03T13:33:30Z"}
+{"level":"debug","msg":"Resolved ocp/4.5:upi-installer (test steps: gather-aws-console) to sha256:62c3dd3bc7647a98c69cd3c042074b56377b5887138bbecb8bc273b190b61d3c.","time":"2023-02-03T13:33:30Z"}
+{"level":"trace","msg":"Using binary as hash: /usr/bin/ci-operator 1675386859 70924931","time":"2023-02-03T13:33:30Z"}
+{"level":"info","msg":"Using namespace https://console-openshift-console.apps.build05.l9oh.p1.openshiftapps.com/k8s/cluster/projects/ci-op-kb75x8wg","time":"2023-02-03T13:33:30Z"}
+{"level":"info","msg":"Running [input:root], [input:base], [input:ocp_builder_rhel-8-golang-1.19-openshift-4.13], [release-inputs:latest], [release-inputs:initial], src, aws-ebs-csi-driver, [output:stable:aws-ebs-csi-driver], [images], [release:latest]","time":"2023-02-03T13:33:30Z"}
+{"level":"debug","msg":"Creating namespace ci-op-kb75x8wg","time":"2023-02-03T13:33:30Z"}
+{"level":"debug","msg":"Spent 1.496612ms waiting for RBAC to initialize in the new namespace.","time":"2023-02-03T13:33:30Z"}
+{"level":"debug","msg":"Spent 5.058166ms waiting for image pull secrets to initialize in the new namespace.","time":"2023-02-03T13:33:30Z"}
+{"authors":["RomanBednar"],"level":"debug","msg":"Creating ci-op-author-access rolebinding in namespace ci-op-kb75x8wg","time":"2023-02-03T13:33:30Z"}
+{"level":"debug","msg":"Setting up pipeline ImageStream for the test","time":"2023-02-03T13:33:30Z"}
+{"level":"debug","msg":"Created PDB for pods with openshift.io/build.name label","time":"2023-02-03T13:33:30Z"}
+{"level":"debug","msg":"Created PDB for pods with created-by-ci label","time":"2023-02-03T13:33:30Z"}
+{"level":"info","msg":"Tagging openshift/release:rhel-8-release-golang-1.19-openshift-4.13 into pipeline:root.","time":"2023-02-03T13:33:30Z"}
+{"level":"info","msg":"Tagging ocp/builder:rhel-8-golang-1.19-openshift-4.13 into pipeline:ocp_builder_rhel-8-golang-1.19-openshift-4.13.","time":"2023-02-03T13:33:30Z"}
+{"level":"info","msg":"Tagging ocp/4.13:base into pipeline:base.","time":"2023-02-03T13:33:30Z"}
+{"level":"info","msg":"Building src","time":"2023-02-03T13:33:30Z"}
+{"level":"trace","msg":"Waiting for build to be complete.","name":"src","namespace":"ci-op-kb75x8wg","time":"2023-02-03T13:33:30Z"}
+{"level":"info","msg":"Build src succeeded after 3m17s","time":"2023-02-03T13:36:47Z"}
+{"level":"info","msg":"Building aws-ebs-csi-driver","time":"2023-02-03T13:36:47Z"}
+{"level":"trace","msg":"Waiting for build to be complete.","name":"aws-ebs-csi-driver","namespace":"ci-op-kb75x8wg","time":"2023-02-03T13:36:47Z"}
+{"level":"info","msg":"Build aws-ebs-csi-driver succeeded after 2m5s","time":"2023-02-03T13:38:52Z"}
+{"level":"info","msg":"Tagging aws-ebs-csi-driver into stable","time":"2023-02-03T13:38:52Z"}
+{"level":"info","msg":"Creating release image registry.build05.ci.openshift.org/ci-op-kb75x8wg/release:latest.","time":"2023-02-03T13:38:52Z"}
+{"level":"debug","msg":"Executing pod \"release-latest\" running image \"stable:cli\"","time":"2023-02-03T13:38:52Z"}
+{"level":"info","msg":"Snapshot integration stream into release 4.13.0-0.ci.test-2023-02-03-133852-ci-op-kb75x8wg-latest to tag release:latest ","time":"2023-02-03T13:40:12Z"}
+{"level":"debug","msg":"No custom metadata found and prow metadata already exists. Not updating the metadata.","time":"2023-02-03T13:40:12Z"}
+{"level":"info","msg":"Ran for 6m42s","time":"2023-02-03T13:40:12Z"}
+{"level":"info","msg":"Reporting job state 'succeeded'","time":"2023-02-03T13:40:12Z"}

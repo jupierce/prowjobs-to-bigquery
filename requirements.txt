@@ -1,2 +1,5 @@
 future~=0.18.2
-google~=3.0.0
+google
+google-cloud
+google-cloud-storage
+google-cloud-bigquery
