@@ -14,7 +14,7 @@ from google.cloud import bigquery, storage
 JOBS_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.jobs'
 
 CI_OPERATOR_LOGS_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.ci_operator_logs'
-CI_OPERATOR_LOGS_SCHEMA_LEVEL = 7
+CI_OPERATOR_LOGS_SCHEMA_LEVEL = 8
 
 # Using globals is ugly, but when running in cold load mode, these will be set for each separate process.
 # https://stackoverflow.com/questions/10117073/how-to-use-initializer-to-set-up-my-multiprocess-pool
@@ -115,7 +115,7 @@ sub_expressions = [
     # Example: Acquired 1 lease(s) for aws-quota-slice: [us-east-1--aws-quota-slice-28]
     r"(Acquired (?P<lease_count>\d+) lease.s. for (?P<acquired_slice_name>[^:]+): (?P<lease_names>[^\s\"]+))",
     # Example: Building src
-    r"(Build (?P<build_name_start>[^\"]+))",
+    r"(Building (?P<build_name_start>[^\"]+))",
     # Examples:
     # - Build aws-ebs-csi-driver succeeded after 2m5s
     # - Build %s already succeeded in %s
