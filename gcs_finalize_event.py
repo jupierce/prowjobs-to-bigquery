@@ -3,6 +3,7 @@ import datetime
 import pathlib
 import json
 import multiprocessing
+import time
 import re
 
 from typing import NamedTuple, List, Dict
@@ -228,7 +229,7 @@ def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_buil
                 duration_ms=ms_diff_from_time_strs(start_time, dt),
                 prowjob_build_id=prowjob_build_id,
                 test_name=multi_stage_test_name,
-                success='succeeded' in m.group('step_outcome'),
+                success='succeeded' in m.group('step_name_outcome'),
             )
             log_records.append(record._asdict())
 
@@ -330,16 +331,12 @@ def parse_prowjob_json(prowjob_json_text):
 
 
 def parse_ci_operator_log_resources_from_gcs(build_id: str, file_path: str) -> List[Dict]:
-    try:
-        b = global_origin_ci_test_bucket_client.get_blob(file_path)
-        if not b:
-            return None
+    b = global_origin_ci_test_bucket_client.get_blob(file_path)
+    if not b:
+        return None
 
-        ci_operator_log_text = b.download_as_text()
-        return parse_ci_operator_log_resources_text(file_path, build_id, ci_operator_log_text)
-    except Exception as e:
-        print(f'Error retrieving ci-operator log file: {file_path}: {e}')
-        return []
+    ci_operator_log_text = b.download_as_text()
+    return parse_ci_operator_log_resources_text(file_path, build_id, ci_operator_log_text)
 
 
 def parse_prowjob_from_gcs(file_path: str):
@@ -363,9 +360,9 @@ def process_ci_operator_log_from_gcs(build_id: str, file_path: str):
         raise IOError("Encountered errors while inserting rows: {}".format(errors))
 
 
-def parse_ci_operator_log_from_gcs_file_path(file_path: str) -> List[Dict]:
+def process_ci_operator_log_from_gcs_file_path(file_path: str):
     prowjob_build_id = pathlib.Path(file_path).parent.parent.name
-    return parse_ci_operator_log_resources_from_gcs(prowjob_build_id, file_path)
+    process_ci_operator_log_from_gcs(prowjob_build_id, file_path)
 
 
 def process_prowjob_from_gcs(file_path: str):
@@ -410,7 +407,7 @@ def cs_object_generator(row_generator):
 
 
 def cold_load_all_prowjobs():
-    origin_ci_test_usage_table_id = 'openshift-gce-devel.ci_analysis_us.origin-ci-test_usage_analysis'
+    origin_ci_test_usage_table_id = 'openshift-gce-devel.ci_analysis_us.origin-ci_test_usage_analysis'
     query_all_prowjob_jsons = f"""
     SELECT DISTINCT cs_object FROM `{origin_ci_test_usage_table_id}`
     WHERE time_micros > 1630468800000 AND cs_object LIKE "%/prowjob.json"
@@ -433,13 +430,9 @@ def cold_load_all_prowjobs():
         inserts.clear()
         return count
 
-    all_paths = [lp['cs_object'] for lp in prowjob_paths]
-    total_file_count = len(all_paths)
-    print(f'{total_file_count} files need to be processed')
-
     # Have multiple processes per processor since read from GCS will take a few I/O beats
     pool = multiprocessing.Pool(multiprocessing.cpu_count()*12, process_connection_setup)
-    vals = pool.imap_unordered(parse_prowjob_from_gcs, all_paths, chunksize=1000)
+    vals = pool.imap_unordered(parse_prowjob_from_gcs, cs_object_generator(prowjob_paths), chunksize=1000)
     for val in vals:
         if not val:
             continue
@@ -463,37 +456,29 @@ def cold_load_all_ci_operator_logs():
 
     inserts = []
     total_inserts = 0
-    total_files = 0
 
     def send_inserts():
         if not inserts:  # No items to insert?
             return 0
         count = len(inserts)
-        try:
-            errors = bq.insert_rows_json(CI_OPERATOR_LOGS_TABLE_ID, inserts)
-            if errors == []:
-                print("New rows have been added.")
-            else:
-                raise IOError("Encountered errors while inserting rows: {}".format(errors))
-        except Exception as e:
-            print(f'Error inserting rows: {e}')
+        errors = bq.insert_rows_json(CI_OPERATOR_LOGS_TABLE_ID, inserts)
+        if errors == []:
+            print("New rows have been added.")
+        else:
+            raise IOError("Encountered errors while inserting rows: {}".format(errors))
         inserts.clear()
         return count
 
-    all_paths = [lp['cs_object'] for lp in ci_operator_log_paths]
-    total_file_count = len(all_paths)
-    print(f'{total_file_count} files need to be processed')
-
     # Have multiple processes per processor since read from GCS will take a few I/O beats
     pool = multiprocessing.Pool(multiprocessing.cpu_count()*3, process_connection_setup)
-    vals = pool.imap_unordered(parse_ci_operator_log_from_gcs_file_path, all_paths, chunksize=1000)
+    vals = pool.imap_unordered(process_ci_operator_log_from_gcs_file_path, [lp['cs_object'] for lp in ci_operator_log_paths], chunksize=1000)
     for val in vals:
         if not val:
             continue
         inserts.extend(val)
         if len(inserts) > 1000:
             total_inserts += send_inserts()
-            print(f'Rows inserted so far: {total_inserts} ({total_files} of {total_file_count})')
+            print(f'Rows inserted so far: {total_inserts}')
 
     total_inserts += send_inserts()
     print(f'Total number of rows inserted: {total_inserts}')
@@ -507,5 +492,3 @@ if __name__ == '__main__':
     # cold_load_all()
 
     cold_load_all_ci_operator_logs()
-
-
