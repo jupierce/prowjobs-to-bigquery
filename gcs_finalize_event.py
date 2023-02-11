@@ -15,7 +15,7 @@ from google.cloud import bigquery, storage
 JOBS_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.jobs'
 
 CI_OPERATOR_LOGS_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.ci_operator_logs'
-CI_OPERATOR_LOGS_SCHEMA_LEVEL = 8
+CI_OPERATOR_LOGS_SCHEMA_LEVEL = 10
 
 # Using globals is ugly, but when running in cold load mode, these will be set for each separate process.
 # https://stackoverflow.com/questions/10117073/how-to-use-initializer-to-set-up-my-multiprocess-pool
