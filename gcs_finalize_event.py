@@ -229,7 +229,7 @@ def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_buil
                 duration_ms=ms_diff_from_time_strs(start_time, dt),
                 prowjob_build_id=prowjob_build_id,
                 test_name=multi_stage_test_name,
-                success='succeeded' in m.group('step_name_outcome'),
+                success='succeeded' in m.group('step_outcome'),
             )
             log_records.append(record._asdict())
 
