@@ -195,21 +195,22 @@ def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_buil
             build_start[m.group('build_name_start')] = dt
 
         if m.group('build_name_outcome'):
-            start_time = build_start.pop(m.group('build_name_outcome'))
-            record = CiOperatorLogRecord(
-                schema_level=CI_OPERATOR_LOGS_SCHEMA_LEVEL,
-                file_path=ci_operator_log_file,
-                step_name=None,
-                build_name=m.group('build_name_outcome'),
-                lease_name=None,
-                started_at=start_time,
-                finished_at=dt,
-                duration_ms=ms_diff_from_time_strs(start_time, dt),
-                prowjob_build_id=prowjob_build_id,
-                test_name=multi_stage_test_name,
-                success='succeeded' in log_line,
-            )
-            log_records.append(record._asdict())
+            if m.group('build_name_outcome') in build_start:  # Will not be present if the build is cached.
+                start_time = build_start.pop(m.group('build_name_outcome'))
+                record = CiOperatorLogRecord(
+                    schema_level=CI_OPERATOR_LOGS_SCHEMA_LEVEL,
+                    file_path=ci_operator_log_file,
+                    step_name=None,
+                    build_name=m.group('build_name_outcome'),
+                    lease_name=None,
+                    started_at=start_time,
+                    finished_at=dt,
+                    duration_ms=ms_diff_from_time_strs(start_time, dt),
+                    prowjob_build_id=prowjob_build_id,
+                    test_name=multi_stage_test_name,
+                    success='succeeded' in log_line,
+                )
+                log_records.append(record._asdict())
 
         # Steps
         if m.group('step_name_start'):
