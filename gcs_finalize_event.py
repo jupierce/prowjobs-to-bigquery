@@ -4,8 +4,10 @@ import pathlib
 import json
 import multiprocessing
 import re
+import hashlib
+from xml import sax
 
-from typing import NamedTuple, List, Dict
+from typing import NamedTuple, List, Dict, Optional
 from model import Model, Missing, ListModel
 
 from google.cloud import bigquery, storage
@@ -15,6 +17,9 @@ JOBS_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.jobs'
 
 CI_OPERATOR_LOGS_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.ci_operator_logs'
 CI_OPERATOR_LOGS_SCHEMA_LEVEL = 10
+
+JUNIT_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.junit'
+JUNIT_TABLE_SCHEMA_LEVEL = 1
 
 # Using globals is ugly, but when running in cold load mode, these will be set for each separate process.
 # https://stackoverflow.com/questions/10117073/how-to-use-initializer-to-set-up-my-multiprocess-pool
@@ -91,19 +96,34 @@ def to_kv_list(kv_map):
     return kv_list
 
 
-class CiOperatorLogRecord(NamedTuple):
+class JUnitTestRecord(NamedTuple):
     schema_level: int
     file_path: str
     prowjob_build_id: str
 
+    test_id: str
+    test_name: str
+    duration_ms: int
+    success: bool
+    skipped: bool
+    modified_time: str
+    branch: str
+
+
+class CiOperatorLogRecord(NamedTuple):
+    schema_level: int
+    file_path: str
+    prowjob_build_id: str
+    test_id: str  # test id should not change over time whereas test_name is allowed to
     test_name: str  # multi-stage-test name when multi-stage
-    step_name: str  # if a step was being run
-    build_name: str  # if a build is being run
-    lease_name: str  # if a lease is being acquired
+    step_name: Optional[str]  # if a step was being run
+    build_name: Optional[str]  # if a build is being run
+    lease_name: Optional[str]  # if a lease is being acquired
     started_at: str
     finished_at: str
     duration_ms: int
     success: bool
+    branch: str
 
 # Regex for parsing ci-operator.log insights.
 # Parsing json and then looking for specific messages is CPU intensive relative to
@@ -137,6 +157,10 @@ combined_pattern = r"{\"level\":\"\w+\",\"msg\":\"(?:" + \
 
 log_entry_pattern = re.compile(combined_pattern)
 
+# Group 1 extracts path up to prowjob id (e.g. 	branch-ci-openshift-jenkins-release-4.10-images/1604867803796475904 ).
+# Group 2 extracts prowjob_id
+junit_path_pattern = re.compile(r"^(.*?\/([\d]+))\/.*\/?junit[^\/]+xml$")
+test_id_pattern = re.compile(r"^.*{([a-f0-9]+)}.*$")
 
 def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_build_id: str, ci_operator_log_str: str) -> List[Dict]:
 
@@ -234,6 +258,67 @@ def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_buil
             log_records.append(record._asdict())
 
     return log_records
+
+
+class JUnitHandler(sax.handler.ContentHandler):
+
+    def __init__(self, modified_time: str, branch: str, prowjob_build_id: str, file_path: str):
+        self.modified_time = modified_time
+        self.branch = branch
+        self.testsuite = None
+        self.test_duration_ms = None
+        self.test_id = None
+        self.test_name = None
+        self.test_success = None
+        self.test_skipped = None
+        self.prowjob_build_id = prowjob_build_id
+        self.file_path = file_path
+        self.record_dicts: List[Dict] = list()
+
+    def startElement(self, name, attrs):
+        if name == 'testsuite':
+            self.testsuite = attrs.get('name', '')
+        elif name == 'testcase':
+            self.test_name: str = attrs.get('name')
+            id_match = test_id_pattern.match(self.test_name)  # Does the test has a test_id override?
+            if id_match:
+                tid = id_match.group(1)
+            else:
+                tid = hashlib.md5(self.test_name.encode('utf-8')).hexdigest()
+
+            self.test_id = tid
+            self.test_duration_ms = int(float(attrs.get('time', '0.0')) * 1000)
+            self.test_success = True  # Assume true until we hit a failure element
+            self.test_skipped = False  # Assume true until we hit a failure element
+
+    def endElement(self, name):
+        if name == 'failure':
+            self.test_success = False
+        elif name == 'skipped':
+            self.test_skipped = True
+        elif name == 'testcase':
+            record = JUnitTestRecord(
+                prowjob_build_id=self.prowjob_build_id,
+                file_path=self.file_path,
+                schema_level=JUNIT_TABLE_SCHEMA_LEVEL,
+                test_id=self.test_id,
+                success=self.test_success,
+                skipped=self.test_skipped,
+                test_name=self.test_name,
+                duration_ms=self.test_duration_ms,
+                modified_time=self.modified_time,
+                branch=self.branch
+            )
+            self.record_dicts.append(record._asdict())
+
+    def characters(self, content):
+        pass
+
+
+def parse_junit_xml(junit_xml_text, modified_time: str, branch: str, prowjob_build_id: str, file_path: str) -> List[Dict]:
+    handler = JUnitHandler(modified_time=modified_time, branch=branch, prowjob_build_id=prowjob_build_id, file_path=file_path)
+    sax.parseString(junit_xml_text, handler)
+    return handler.record_dicts
 
 
 def parse_prowjob_json(prowjob_json_text):
@@ -352,6 +437,41 @@ def parse_prowjob_from_gcs(file_path: str):
     return parse_prowjob_json(prowjob_json_text)
 
 
+def parse_junit_from_gcs(base_path: str, prowjob_build_id: str, file_path: str):
+    b = global_origin_ci_test_bucket_client.get_blob(file_path)
+    if not b:
+        return None
+
+    branch = 'unknown'
+    started_blob = global_origin_ci_test_bucket_client.get_blob(f'{base_path}/started.json')
+    if started_blob:
+        started_json_text = started_blob.download_as_text()
+        # e.g. {"timestamp":1678557659,"repos":{"openshift/release":"master"},"repo-commit":"master","repo-version":"master"}
+        started = json.loads(started_json_text)
+        repos: Dict = started.get('repos', {'unknown': 'unknown'})
+        branch = list(repos.values())[0]  # assuming here that there are not going to be multi-branch periodics
+
+    updated_dt = b.updated
+    if not updated_dt:
+        updated_dt = datetime.datetime.now()
+
+    junit_xml_text = b.download_as_text()
+    updated_time_str = updated_dt.strftime('%Y-%m-%d %H:%M:%S') #  goal is something like '2023-03-10 22:46:35'
+    return parse_junit_xml(junit_xml_text, modified_time=updated_time_str, branch=branch, prowjob_build_id=prowjob_build_id, file_path=file_path)
+
+
+def process_junit_file_from_gcs(base_path: str, prowjob_build_id: str, file_path: str):
+    junit_records = parse_junit_from_gcs(base_path=base_path, prowjob_build_id=prowjob_build_id, file_path=file_path)
+    if not junit_records:
+        return
+    bq = bigquery.Client()
+    errors = bq.insert_rows_json(JUNIT_TABLE_ID, junit_records)
+    if errors == []:
+        print("New rows have been added.")
+    else:
+        raise IOError("Encountered errors while inserting rows: {}".format(errors))
+
+
 def process_ci_operator_log_from_gcs(build_id: str, file_path: str):
     ci_operator_log_records = parse_ci_operator_log_resources_from_gcs(build_id, file_path)
     if not ci_operator_log_records:
@@ -400,8 +520,12 @@ def gcs_finalize(event, context):
         prowjob_build_id = file_path.parent.name
         ci_operator_log_path = file_path.parent.joinpath('artifacts/ci-operator.log')
         process_ci_operator_log_from_gcs(prowjob_build_id, str(ci_operator_log_path))
-
-    print(f"Processing file: {file['name']}.")
+    elif gcs_file_name.endswith('.xml') and '/pull/' not in gcs_file_name:  # ignore junit from pull requests
+        junit_match = junit_path_pattern.match(gcs_file_name)
+        if junit_match:
+            base_path = junit_match.group(1)
+            prowjob_build_id = junit_match.group(2)
+            process_junit_file_from_gcs(base_path=base_path, prowjob_build_id=prowjob_build_id, file_path=gcs_file_name)
 
 
 # Pool cannot serialize a row for the other processes, so just extract the filename
