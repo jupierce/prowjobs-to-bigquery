@@ -108,6 +108,7 @@ class JUnitTestRecord(NamedTuple):
     skipped: bool
     modified_time: str
     branch: str
+    prowjob_name: str
 
 
 class CiOperatorLogRecord(NamedTuple):
@@ -124,6 +125,7 @@ class CiOperatorLogRecord(NamedTuple):
     duration_ms: int
     success: bool
     branch: str
+
 
 # Regex for parsing ci-operator.log insights.
 # Parsing json and then looking for specific messages is CPU intensive relative to
@@ -158,9 +160,14 @@ combined_pattern = r"{\"level\":\"\w+\",\"msg\":\"(?:" + \
 log_entry_pattern = re.compile(combined_pattern)
 
 # Group 1 extracts path up to prowjob id (e.g. 	branch-ci-openshift-jenkins-release-4.10-images/1604867803796475904 ).
-# Group 2 extracts prowjob_id
-junit_path_pattern = re.compile(r"^(.*?\/([\d]+))\/.*\/?junit[^\/]+xml$")
+# Group 2 extracts prowjob name
+# Group 3 extracts the prowjob numeric id
+junit_path_pattern = re.compile(r"^(.*?\/([^\/]+)\/(\d+))\/.*\/?junit[^\/]+xml$")
 test_id_pattern = re.compile(r"^.*{([a-f0-9]+)}.*$")
+
+# extracts ocp version like '4.11' (in group 1) or 'master' or 'main' (in group 2)
+branch_pattern = re.compile(r"\D+[-\/](\d\.\d+)\D?|.*\-(master|main)\-.*")
+
 
 def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_build_id: str, ci_operator_log_str: str) -> List[Dict]:
 
@@ -262,9 +269,9 @@ def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_buil
 
 class JUnitHandler(sax.handler.ContentHandler):
 
-    def __init__(self, modified_time: str, branch: str, prowjob_build_id: str, file_path: str):
+    def __init__(self, modified_time: str, prowjob_name: str, prowjob_build_id: str, file_path: str):
         self.modified_time = modified_time
-        self.branch = branch
+        self.prowjob_name = prowjob_name
         self.testsuite = None
         self.test_duration_ms = None
         self.test_id = None
@@ -274,6 +281,14 @@ class JUnitHandler(sax.handler.ContentHandler):
         self.prowjob_build_id = prowjob_build_id
         self.file_path = file_path
         self.record_dicts: List[Dict] = list()
+
+        branch_match = branch_pattern.match(self.prowjob_name)
+        if branch_match:
+            self.branch = branch_match.group(1)
+            if not self.branch:
+                self.branch = branch_match.group(2)
+        else:
+            self.branch = 'unknown'
 
     def startElement(self, name, attrs):
         if name == 'testsuite':
@@ -307,7 +322,8 @@ class JUnitHandler(sax.handler.ContentHandler):
                 test_name=self.test_name,
                 duration_ms=self.test_duration_ms,
                 modified_time=self.modified_time,
-                branch=self.branch
+                branch=self.branch,
+                prowjob_name=self.prowjob_name
             )
             self.record_dicts.append(record._asdict())
 
@@ -315,8 +331,8 @@ class JUnitHandler(sax.handler.ContentHandler):
         pass
 
 
-def parse_junit_xml(junit_xml_text, modified_time: str, branch: str, prowjob_build_id: str, file_path: str) -> List[Dict]:
-    handler = JUnitHandler(modified_time=modified_time, branch=branch, prowjob_build_id=prowjob_build_id, file_path=file_path)
+def parse_junit_xml(junit_xml_text, modified_time: str, prowjob_name: str, prowjob_build_id: str, file_path: str) -> List[Dict]:
+    handler = JUnitHandler(modified_time=modified_time, prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id, file_path=file_path)
     sax.parseString(junit_xml_text, handler)
     return handler.record_dicts
 
@@ -437,31 +453,22 @@ def parse_prowjob_from_gcs(file_path: str):
     return parse_prowjob_json(prowjob_json_text)
 
 
-def parse_junit_from_gcs(base_path: str, prowjob_build_id: str, file_path: str):
+def parse_junit_from_gcs(prowjob_name: str, prowjob_build_id: str, file_path: str):
     b = global_origin_ci_test_bucket_client.get_blob(file_path)
     if not b:
         return None
-
-    branch = 'unknown'
-    started_blob = global_origin_ci_test_bucket_client.get_blob(f'{base_path}/started.json')
-    if started_blob:
-        started_json_text = started_blob.download_as_text()
-        # e.g. {"timestamp":1678557659,"repos":{"openshift/release":"master"},"repo-commit":"master","repo-version":"master"}
-        started = json.loads(started_json_text)
-        repos: Dict = started.get('repos', {'unknown': 'unknown'})
-        branch = list(repos.values())[0]  # assuming here that there are not going to be multi-branch periodics
 
     updated_dt = b.updated
     if not updated_dt:
         updated_dt = datetime.datetime.now()
 
     junit_xml_text = b.download_as_text()
-    updated_time_str = updated_dt.strftime('%Y-%m-%d %H:%M:%S') #  goal is something like '2023-03-10 22:46:35'
-    return parse_junit_xml(junit_xml_text, modified_time=updated_time_str, branch=branch, prowjob_build_id=prowjob_build_id, file_path=file_path)
+    updated_time_str = updated_dt.strftime('%Y-%m-%d %H:%M:%S')  # goal is something like '2023-03-10 22:46:35'
+    return parse_junit_xml(junit_xml_text, modified_time=updated_time_str, prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id, file_path=file_path)
 
 
-def process_junit_file_from_gcs(base_path: str, prowjob_build_id: str, file_path: str):
-    junit_records = parse_junit_from_gcs(base_path=base_path, prowjob_build_id=prowjob_build_id, file_path=file_path)
+def process_junit_file_from_gcs(prowjob_name: str, prowjob_build_id: str, file_path: str):
+    junit_records = parse_junit_from_gcs(prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id, file_path=file_path)
     if not junit_records:
         return
     bq = bigquery.Client()
@@ -523,9 +530,9 @@ def gcs_finalize(event, context):
     elif gcs_file_name.endswith('.xml') and '/pull/' not in gcs_file_name:  # ignore junit from pull requests
         junit_match = junit_path_pattern.match(gcs_file_name)
         if junit_match:
-            base_path = junit_match.group(1)
-            prowjob_build_id = junit_match.group(2)
-            process_junit_file_from_gcs(base_path=base_path, prowjob_build_id=prowjob_build_id, file_path=gcs_file_name)
+            prowjob_name = junit_match.group(2)
+            prowjob_build_id = junit_match.group(3)
+            process_junit_file_from_gcs(prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id, file_path=gcs_file_name)
 
 
 # Pool cannot serialize a row for the other processes, so just extract the filename
