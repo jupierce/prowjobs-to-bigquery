@@ -105,6 +105,7 @@ class JUnitTestRecord(NamedTuple):
     test_name: str
     duration_ms: int
     success: bool
+    success_val: int
     skipped: bool
     modified_time: str
     branch: str
@@ -318,6 +319,7 @@ class JUnitHandler(sax.handler.ContentHandler):
                 schema_level=JUNIT_TABLE_SCHEMA_LEVEL,
                 test_id=self.test_id,
                 success=self.test_success,
+                success_val=1 if self.test_success else 0,
                 skipped=self.test_skipped,
                 test_name=self.test_name,
                 duration_ms=self.test_duration_ms,
