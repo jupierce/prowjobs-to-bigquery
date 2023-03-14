@@ -21,12 +21,15 @@ CI_OPERATOR_LOGS_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.ci_operator_logs
 CI_OPERATOR_LOGS_SCHEMA_LEVEL = 10
 
 JUNIT_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.junit'
-JUNIT_TABLE_SCHEMA_LEVEL = 7
+JUNIT_TABLE_SCHEMA_LEVEL = 10
 
 # Using globals is ugly, but when running in cold load mode, these will be set for each separate process.
 # https://stackoverflow.com/questions/10117073/how-to-use-initializer-to-set-up-my-multiprocess-pool
 global_storage_client = None
 global_origin_ci_test_bucket_client = None
+
+global_bq_client = None
+
 
 use_ET = False
 try:
@@ -39,8 +42,10 @@ except:
 def process_connection_setup():
     global global_storage_client
     global global_origin_ci_test_bucket_client
+    global global_bq_client
     global_storage_client = storage.Client()
     global_origin_ci_test_bucket_client = global_storage_client.bucket('origin-ci-test')
+    global_bq_client = bigquery.Client()
 
 
 class JobsRecord(NamedTuple):
@@ -532,7 +537,7 @@ def process_junit_file_from_gcs(prowjob_name: str, prowjob_build_id: str, file_p
     bq = bigquery.Client()
     errors = bq.insert_rows_json(JUNIT_TABLE_ID, junit_records)
     if errors == []:
-        print("New rows have been added.")
+        print(f"New rows have been added: {len(junit_records)}.")
     else:
         raise IOError("Encountered errors while inserting rows: {}".format(errors))
 
@@ -562,6 +567,16 @@ def parse_junit_from_gcs_file_path(file_path: str) -> List[Dict]:
             prowjob_build_id = junit_match.group(3)
             junit_records = parse_junit_from_gcs(prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id,
                                                  file_path=file_path)
+
+            # There are a huge number of junit records to send. When all records are passed by the to the main
+            # thread, the number of records grows so large that memory is exhausted. To help with that,
+            # each thread, if it has a significant number of records, will make its own bigquery insert.
+
+            if junit_records and len(junit_records) > 50:  # Pass small count updates back to the main thread to be grouped
+                errors = global_bq_client.insert_rows_json(JUNIT_TABLE_ID, junit_records)
+                if errors != []:
+                    print(f'ERROR: thread could not insert records: {errors}')
+                junit_records.clear()
             return junit_records
     except Exception as e:
         print(f'\n\nError while processing: {file_path}')
@@ -632,7 +647,7 @@ def cold_load_all_prowjobs():
         count = len(inserts)
         errors = bq.insert_rows_json(JOBS_TABLE_ID, inserts)
         if errors == []:
-            print("New rows have been added.")
+            print(f"New rows have been added: {count}")
         else:
             raise IOError("Encountered errors while inserting rows: {}".format(errors))
         inserts.clear()
@@ -725,7 +740,7 @@ def cold_load_junit():
         junit_xml_paths = bq.query(query_all_storage_junit_paths)
 
         query_all_processed_junit_paths = f"""
-        SELECT DISTINCT file_path FROM `{JUNIT_TABLE_ID}`
+        SELECT DISTINCT file_path FROM `{JUNIT_TABLE_ID}` WHERE SCHEMA_LEVEL = {JUNIT_TABLE_SCHEMA_LEVEL}
         """
         junit_processed_xml_paths = bq.query(query_all_processed_junit_paths)
 
@@ -752,7 +767,7 @@ def cold_load_junit():
         try:
             errors = bq.insert_rows_json(JUNIT_TABLE_ID, inserts)
             if errors == []:
-                print("New rows have been added.")
+                print(f"New rows have been added: {count}")
             else:
                 raise IOError("Encountered errors while inserting rows: {}".format(errors))
         except Exception as e:
@@ -767,22 +782,19 @@ def cold_load_junit():
 
     while len(remaining_paths) > 0:
         p_count = multiprocessing.cpu_count()
-        pool = multiprocessing.Pool(p_count*2, process_connection_setup)
-        vals = pool.imap_unordered(parse_junit_from_gcs_file_path, list(remaining_paths)[:5000], chunksize=100)
+        pool = multiprocessing.Pool(p_count, process_connection_setup)
+        portion_to_process = list(remaining_paths)[:5000]
+        vals = pool.imap_unordered(parse_junit_from_gcs_file_path, portion_to_process, chunksize=5)
         for val in vals:
             if not val:
                 continue
 
-            for v in val:
-                if v['file_path'] in remaining_paths:
-                    remaining_paths.remove(v['file_path'])
-
             inserts.extend(val)
             if len(inserts) > 1000:
                 total_inserts += send_inserts()
-                print(f'Files remaining: {len(remaining_paths)}')
 
         total_inserts += send_inserts()
+        remaining_paths.difference_update(portion_to_process)
         print(f'Files remaining: {len(remaining_paths)}')
         print(f'Total number of rows inserted: {total_inserts}')
         print('CLOSING POOL')
