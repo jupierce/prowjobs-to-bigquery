@@ -18,10 +18,15 @@ SELECT * EXCEPT(schema_level) FROM `openshift-gce-devel.ci_analysis_us.ci_operat
   - CSV
   - ![img.png](img/img.png)
 
+Delete some of the unnecessary content from the analysis table:
+```
+DELETE FROM `openshift-gce-devel.ci_analysis_us.origin-ci-test_usage_analysis` WHERE cs_method NOT IN ("PUT", "POST") or cs_user_agent = "GCS Lifecycle Management"
+```
+- 
 - Change schema_version in gcs_finalize_event.py
-- Setup massive system in GCE running debian - configure to runs as aos-kettle.
+- Setup massive system in GCE running debian (e.g. n2-highcpu-96) - configure to runs as aos-kettle.
 - sudo apt install python3 python3-pip
-- sudo pip install google-cloud-storage google-cloud-bigquery future
+- sudo pip install google-cloud-storage google-cloud-bigquery future lxml
 - Upload model.py and gcs_finalize_event.py to /loader
 - chmod +x gcs_finalize_event.py
 - ulimit -n 5000

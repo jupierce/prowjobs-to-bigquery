@@ -5,8 +5,10 @@ import json
 import multiprocessing
 import re
 import hashlib
+import traceback
 from xml import sax
 
+from io import StringIO
 from typing import NamedTuple, List, Dict, Optional
 from model import Model, Missing, ListModel
 
@@ -19,12 +21,19 @@ CI_OPERATOR_LOGS_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.ci_operator_logs
 CI_OPERATOR_LOGS_SCHEMA_LEVEL = 10
 
 JUNIT_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.junit'
-JUNIT_TABLE_SCHEMA_LEVEL = 1
+JUNIT_TABLE_SCHEMA_LEVEL = 7
 
 # Using globals is ugly, but when running in cold load mode, these will be set for each separate process.
 # https://stackoverflow.com/questions/10117073/how-to-use-initializer-to-set-up-my-multiprocess-pool
 global_storage_client = None
 global_origin_ci_test_bucket_client = None
+
+use_ET = False
+try:
+    import xml.etree.ElementTree as ET
+    use_ET =True
+except:
+    print('Unable to use ElementTree')
 
 
 def process_connection_setup():
@@ -268,6 +277,14 @@ def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_buil
     return log_records
 
 
+class SimpleErrorHandler(sax.handler.ErrorHandler):
+    def __init__(self):
+        pass
+
+    def fatalError(self, e):
+        pass
+
+
 class JUnitHandler(sax.handler.ContentHandler):
 
     def __init__(self, modified_time: str, prowjob_name: str, prowjob_build_id: str, file_path: str):
@@ -303,12 +320,20 @@ class JUnitHandler(sax.handler.ContentHandler):
                 tid = hashlib.md5(self.test_name.encode('utf-8')).hexdigest()
 
             self.test_id = tid
-            self.test_duration_ms = int(float(attrs.get('time', '0.0')) * 1000)
+            try:
+                self.test_duration_ms = int(float(attrs.get('time', '0.0')) * 1000)
+            except ValueError:
+                self.test_duration_ms = 0
             self.test_success = True  # Assume true until we hit a failure element
             self.test_skipped = False  # Assume true until we hit a failure element
 
+    def startElementNS(self, name, qname, attributes):
+        self.startElement(name, attributes)
+
     def endElement(self, name):
         if name == 'failure':
+            self.test_success = False
+        elif name == 'error':
             self.test_success = False
         elif name == 'skipped':
             self.test_skipped = True
@@ -329,13 +354,31 @@ class JUnitHandler(sax.handler.ContentHandler):
             )
             self.record_dicts.append(record._asdict())
 
+    def endElementNS(self, name, qname):
+        self.endElement(name)
+
     def characters(self, content):
         pass
 
 
 def parse_junit_xml(junit_xml_text, modified_time: str, prowjob_name: str, prowjob_build_id: str, file_path: str) -> List[Dict]:
-    handler = JUnitHandler(modified_time=modified_time, prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id, file_path=file_path)
-    sax.parseString(junit_xml_text, handler)
+    handler = JUnitHandler(modified_time=modified_time, prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id,
+                           file_path=file_path)
+    if use_ET:
+        context = ET.iterparse(StringIO(junit_xml_text), events=("start", "end"))
+        for index, (event, elem) in enumerate(context):
+            # Get the root element.
+            if index == 0:
+                root = elem
+            if event == 'start':
+                handler.startElement(elem.tag, elem.attrib)
+            if event == "end":
+                handler.endElement(elem.tag)
+                root.clear()
+    else:
+        sax.parseString(junit_xml_text, handler, SimpleErrorHandler())
+
+    handler.setDocumentLocator(None)
     return handler.record_dicts
 
 
@@ -455,9 +498,21 @@ def parse_prowjob_from_gcs(file_path: str):
     return parse_prowjob_json(prowjob_json_text)
 
 
+junk_bytes_pattern = re.compile(r'[^\x20-\x7E]+')
+
+
 def parse_junit_from_gcs(prowjob_name: str, prowjob_build_id: str, file_path: str):
+
+    if file_path.endswith('junit_operator.xml'):
+        # This is ci-operator's junit. Not important for TRT atm.
+        return None
+
     b = global_origin_ci_test_bucket_client.get_blob(file_path)
     if not b:
+        return None
+
+    if b.size is not None and b.size == 0:
+        # Lots of empty junit xml files it turns out..
         return None
 
     updated_dt = b.updated
@@ -465,6 +520,7 @@ def parse_junit_from_gcs(prowjob_name: str, prowjob_build_id: str, file_path: st
         updated_dt = datetime.datetime.now()
 
     junit_xml_text = b.download_as_text()
+    junit_xml_text = re.sub(junk_bytes_pattern, ' ', junit_xml_text)
     updated_time_str = updated_dt.strftime('%Y-%m-%d %H:%M:%S')  # goal is something like '2023-03-10 22:46:35'
     return parse_junit_xml(junit_xml_text, modified_time=updated_time_str, prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id, file_path=file_path)
 
@@ -496,6 +552,21 @@ def process_ci_operator_log_from_gcs(build_id: str, file_path: str):
 def parse_ci_operator_log_from_gcs_file_path(file_path: str) -> List[Dict]:
     prowjob_build_id = pathlib.Path(file_path).parent.parent.name
     return parse_ci_operator_log_resources_from_gcs(prowjob_build_id, file_path)
+
+
+def parse_junit_from_gcs_file_path(file_path: str) -> List[Dict]:
+    try:
+        junit_match = junit_path_pattern.match(file_path)
+        if junit_match:
+            prowjob_name = junit_match.group(2)
+            prowjob_build_id = junit_match.group(3)
+            junit_records = parse_junit_from_gcs(prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id,
+                                                 file_path=file_path)
+            return junit_records
+    except Exception as e:
+        print(f'\n\nError while processing: {file_path}')
+        traceback.print_exc()
+    return []
 
 
 def process_prowjob_from_gcs(file_path: str):
@@ -633,12 +704,98 @@ def cold_load_all_ci_operator_logs():
     print(f'Total number of rows inserted: {total_inserts}')
 
 
+def cold_load_junit():
+    bq = bigquery.Client()
+
+    remaining_paths = set()
+    cache_file = pathlib.Path('cache')
+    if cache_file.is_file():
+        with cache_file.open('r', encoding='utf-8') as c:
+            while True:
+                line = c.readline()
+                if not line:
+                    break
+                remaining_paths.add(line.strip())
+    else:
+        origin_ci_test_usage_table_id = 'openshift-gce-devel.ci_analysis_us.origin-ci-test_usage_analysis'
+        query_all_storage_junit_paths = f"""
+        SELECT DISTINCT cs_object FROM `{origin_ci_test_usage_table_id}`
+        WHERE time_micros > 1630468800000 AND cs_object LIKE "%/junit%.xml" AND cs_method IN ("PUT", "POST") AND cs_object NOT LIKE "%/pull/%"
+        """
+        junit_xml_paths = bq.query(query_all_storage_junit_paths)
+
+        query_all_processed_junit_paths = f"""
+        SELECT DISTINCT file_path FROM `{JUNIT_TABLE_ID}`
+        """
+        junit_processed_xml_paths = bq.query(query_all_processed_junit_paths)
+
+        all_paths = set(lp['cs_object'] for lp in junit_xml_paths)
+        registered_paths = set(lp['file_path'] for lp in junit_processed_xml_paths)
+
+        print(f'All found paths: {len(all_paths)}')
+        print(f'Already registered paths: {len(registered_paths)}')
+        already_done = all_paths.intersection(registered_paths)
+        print(f'Already registered: {len(already_done)}')
+        already_done = None
+        remaining_paths = set(all_paths.difference(registered_paths))
+        with cache_file.open('w+', encoding='utf-8') as c:
+            for p in remaining_paths:
+                c.write(f'{p}\n')
+
+    inserts = []
+    total_inserts = 0
+
+    def send_inserts():
+        if not inserts:  # No items to insert?
+            return 0
+        count = len(inserts)
+        try:
+            errors = bq.insert_rows_json(JUNIT_TABLE_ID, inserts)
+            if errors == []:
+                print("New rows have been added.")
+            else:
+                raise IOError("Encountered errors while inserting rows: {}".format(errors))
+        except Exception as e:
+            print(f'Error inserting rows: {e}')
+        inserts.clear()
+        return count
+
+    print(f'All remaining: {len(remaining_paths)}')
+
+    total_file_count = len(remaining_paths)
+    print(f'{total_file_count} files need to be processed')
+
+    while len(remaining_paths) > 0:
+        p_count = multiprocessing.cpu_count()
+        pool = multiprocessing.Pool(p_count*2, process_connection_setup)
+        vals = pool.imap_unordered(parse_junit_from_gcs_file_path, list(remaining_paths)[:5000], chunksize=100)
+        for val in vals:
+            if not val:
+                continue
+
+            for v in val:
+                if v['file_path'] in remaining_paths:
+                    remaining_paths.remove(v['file_path'])
+
+            inserts.extend(val)
+            if len(inserts) > 1000:
+                total_inserts += send_inserts()
+                print(f'Files remaining: {len(remaining_paths)}')
+
+        total_inserts += send_inserts()
+        print(f'Files remaining: {len(remaining_paths)}')
+        print(f'Total number of rows inserted: {total_inserts}')
+        print('CLOSING POOL')
+        pool.close()
+        pool.join()
+
+
 if __name__ == '__main__':
     # outcome = parse_ci_operator_graph_resources_json('abcdefg', pathlib.Path("ci-operator-graphs/ci-operator-step-graph-1.json").read_text())
     # import yaml
     # print(yaml.dump(outcome))
     # parse_prowjob_json(pathlib.Path("prowjobs/payload-pr.json").read_text())
-    # cold_load_all()
 
-    cold_load_all_ci_operator_logs()
+    #cold_load_all_ci_operator_logs()
+    cold_load_junit()
 
