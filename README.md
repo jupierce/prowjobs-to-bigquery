@@ -20,7 +20,7 @@ SELECT * EXCEPT(schema_level) FROM `openshift-gce-devel.ci_analysis_us.ci_operat
 
 Delete some of the unnecessary content from the analysis table:
 ```
-DELETE FROM `openshift-gce-devel.ci_analysis_us.origin-ci-test_usage_analysis` WHERE cs_method NOT IN ("PUT", "POST") or cs_user_agent = "GCS Lifecycle Management"
+DELETE FROM `openshift-gce-devel.ci_analysis_us.origin-ci-test_usage_analysis` WHERE time_micros < 1664582400000 OR cs_method NOT IN ("PUT", "POST") or cs_user_agent = "GCS Lifecycle Management"
 ```
 - 
 - Change schema_version in gcs_finalize_event.py

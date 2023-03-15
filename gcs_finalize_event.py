@@ -21,7 +21,7 @@ CI_OPERATOR_LOGS_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.ci_operator_logs
 CI_OPERATOR_LOGS_SCHEMA_LEVEL = 10
 
 JUNIT_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.junit'
-JUNIT_TABLE_SCHEMA_LEVEL = 10
+JUNIT_TABLE_SCHEMA_LEVEL = 11
 
 # Using globals is ugly, but when running in cold load mode, these will be set for each separate process.
 # https://stackoverflow.com/questions/10117073/how-to-use-initializer-to-set-up-my-multiprocess-pool
@@ -125,12 +125,17 @@ class JUnitTestRecord(NamedTuple):
     branch: str
     prowjob_name: str
 
+    network: str
+    platform: str
+    arch: str
+    upgrade: str
+    variants: List[str]
+
 
 class CiOperatorLogRecord(NamedTuple):
     schema_level: int
     file_path: str
     prowjob_build_id: str
-    test_id: str  # test id should not change over time whereas test_name is allowed to
     test_name: str  # multi-stage-test name when multi-stage
     step_name: Optional[str]  # if a step was being run
     build_name: Optional[str]  # if a build is being run
@@ -139,7 +144,6 @@ class CiOperatorLogRecord(NamedTuple):
     finished_at: str
     duration_ms: int
     success: bool
-    branch: str
 
 
 # Regex for parsing ci-operator.log insights.
@@ -290,6 +294,130 @@ class SimpleErrorHandler(sax.handler.ErrorHandler):
         pass
 
 
+class VariantMatcher:
+
+    def __init__(self, name: str, regex_pattern: str):
+        self.name = name
+        self.pattern = re.compile(regex_pattern)
+
+    def matches(self, lowercase_prowjob_name: str):
+        return True if self.pattern.search(lowercase_prowjob_name) else False
+
+
+# Lazy load to keep non-junit cloud function load time minimal
+PLATFORM_VARIANTS: Optional[List[VariantMatcher]] = None
+
+
+def get_platform_variants() -> List[VariantMatcher]:
+    global PLATFORM_VARIANTS
+    if PLATFORM_VARIANTS:
+        return PLATFORM_VARIANTS
+    PLATFORM_VARIANTS = [
+        VariantMatcher('metal-assisted', '-metal-assisted'),
+        VariantMatcher('metal-assisted', '-metal.*-single-node'),
+    ]
+    for platform_name in ['alibaba', 'aws', 'azure', 'gcp', 'libvirt', 'openstack', 'ovirt', 'vsphere-upi', 'vsphere', 'metal-ipi', 'metal-upi']:
+        PLATFORM_VARIANTS.append(VariantMatcher(platform_name, f'-{platform_name}'))
+    return PLATFORM_VARIANTS
+
+
+def determine_prowjob_platform(lowercase_prowjob_name: str) -> str:
+    for pv in get_platform_variants():
+        if pv.matches(lowercase_prowjob_name):
+            return pv.name
+    return 'unknown'
+
+
+# Lazy load to keep non-junit cloud function load time minimal
+ARCH_VARIANTS: Optional[List[VariantMatcher]] = None
+
+
+def get_arch_variants() -> List[VariantMatcher]:
+    global ARCH_VARIANTS
+    if ARCH_VARIANTS:
+        return ARCH_VARIANTS
+    ARCH_VARIANTS = []
+    for arch_name in ['heterogeneous', 'ppc64le', 'arm64', 's390x']:
+        ARCH_VARIANTS.append(VariantMatcher(arch_name, f'-{arch_name}'))
+    return ARCH_VARIANTS
+
+
+def determine_prowjob_architecture(lowercase_prowjob_name: str) -> str:
+    for pv in get_arch_variants():
+        if pv.matches(lowercase_prowjob_name):
+            return pv.name
+    return 'amd64'
+
+
+# Lazy load to keep non-junit cloud function load time minimal
+NETWORK_VARIANTS: Optional[List[VariantMatcher]] = None
+
+
+def get_nework_variants() -> List[VariantMatcher]:
+    global NETWORK_VARIANTS
+    if NETWORK_VARIANTS:
+        return NETWORK_VARIANTS
+    NETWORK_VARIANTS = []
+    for network_name in ['sdn', 'ovn']:
+        NETWORK_VARIANTS.append(VariantMatcher(network_name, f'-{network_name}'))
+    return NETWORK_VARIANTS
+
+
+def determine_prowjob_network(lowercase_prowjob_name: str, branch: str) -> str:
+    for pv in get_nework_variants():
+        if pv.matches(lowercase_prowjob_name):
+            return pv.name
+
+    if branch in {'3.11', '4.6', '4.7', '4.8', '4.9', '4.10', '4.11'}:
+        return 'sdn'
+
+    return 'ovn'
+
+
+UPGRADE_VARIANTS: Optional[List[VariantMatcher]] = None
+
+
+def get_upgrade_variants() -> List[VariantMatcher]:
+    global UPGRADE_VARIANTS
+    if UPGRADE_VARIANTS:
+        return UPGRADE_VARIANTS
+    UPGRADE_VARIANTS = [
+        VariantMatcher('upgrade-minor', '-upgrade-minor'),
+        VariantMatcher('upgrade-micro', '-upgrade'),
+    ]
+    return UPGRADE_VARIANTS
+
+
+def determine_prowjob_upgrade(lowercase_prowjob_name: str) -> Optional[str]:
+    for pv in get_upgrade_variants():
+        if pv.matches(lowercase_prowjob_name):
+            return pv.name
+
+    return None
+
+
+OTHER_VARIANTS: Optional[List[VariantMatcher]] = None
+
+
+def get_other_variants() -> List[VariantMatcher]:
+    global OTHER_VARIANTS
+    if OTHER_VARIANTS:
+        return OTHER_VARIANTS
+    OTHER_VARIANTS = list()
+    for name in ['microshift', 'hypershift', 'serial', 'assisted', 'compact', 'osd', 'fips', 'techpreview', 'realtime', 'proxy', 'single-node', 'rt']:
+        OTHER_VARIANTS.append(VariantMatcher(name, f'-{name}'))
+    return OTHER_VARIANTS
+
+
+def determine_other_variants(lowercase_prowjob_name: str) -> List[str]:
+    other: List[str] = []
+    for pv in get_other_variants():
+        if pv.matches(lowercase_prowjob_name):
+            other.append(pv.name)
+
+    return other
+
+
 class JUnitHandler(sax.handler.ContentHandler):
 
     def __init__(self, modified_time: str, prowjob_name: str, prowjob_build_id: str, file_path: str):
@@ -343,6 +471,7 @@ class JUnitHandler(sax.handler.ContentHandler):
         elif name == 'skipped':
             self.test_skipped = True
         elif name == 'testcase':
+            lc = self.prowjob_name.lower()
             record = JUnitTestRecord(
                 prowjob_build_id=self.prowjob_build_id,
                 file_path=self.file_path,
@@ -355,7 +484,12 @@ class JUnitHandler(sax.handler.ContentHandler):
                 duration_ms=self.test_duration_ms,
                 modified_time=self.modified_time,
                 branch=self.branch,
-                prowjob_name=self.prowjob_name
+                prowjob_name=self.prowjob_name,
+                network=determine_prowjob_network(lc, self.branch),
+                platform=determine_prowjob_platform(lc),
+                arch=determine_prowjob_architecture(lc),
+                upgrade=determine_prowjob_upgrade(lc),
+                variants=determine_other_variants(lc),
             )
             self.record_dicts.append(record._asdict())
 
@@ -481,7 +615,7 @@ def parse_prowjob_json(prowjob_json_text):
     return record_dict
 
 
-def parse_ci_operator_log_resources_from_gcs(build_id: str, file_path: str) -> List[Dict]:
+def parse_ci_operator_log_resources_from_gcs(build_id: str, file_path: str) -> Optional[List[Dict]]:
     try:
         b = global_origin_ci_test_bucket_client.get_blob(file_path)
         if not b:
@@ -676,7 +810,7 @@ def cold_load_all_ci_operator_logs():
     origin_ci_test_usage_table_id = 'openshift-gce-devel.ci_analysis_us.origin-ci-test_usage_analysis'
     query_all_ci_operator_paths = f"""
     SELECT DISTINCT cs_object FROM `{origin_ci_test_usage_table_id}`
-    WHERE time_micros > 1630468800000 AND cs_object LIKE "%/ci-operator.log"
+    WHERE time_micros > 1664582400000 AND cs_object LIKE "%/ci-operator.log"
     """
     bq = bigquery.Client()
     ci_operator_log_paths = bq.query(query_all_ci_operator_paths)
@@ -735,7 +869,7 @@ def cold_load_junit():
         origin_ci_test_usage_table_id = 'openshift-gce-devel.ci_analysis_us.origin-ci-test_usage_analysis'
         query_all_storage_junit_paths = f"""
         SELECT DISTINCT cs_object FROM `{origin_ci_test_usage_table_id}`
-        WHERE time_micros > 1630468800000 AND cs_object LIKE "%/junit%.xml" AND cs_method IN ("PUT", "POST") AND cs_object NOT LIKE "%/pull/%"
+        WHERE time_micros > 1664582400000 AND cs_object LIKE "%/junit%.xml" AND cs_method IN ("PUT", "POST") AND cs_object NOT LIKE "%/pull/%"
         """
         junit_xml_paths = bq.query(query_all_storage_junit_paths)
 
