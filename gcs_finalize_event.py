@@ -184,8 +184,8 @@ log_entry_pattern = re.compile(combined_pattern)
 junit_path_pattern = re.compile(r"^(.*?\/([^\/]+)\/(\d+))\/.*\/?junit[^\/]+xml$")
 test_id_pattern = re.compile(r"^.*{([a-f0-9]+)}.*$")
 
-# extracts ocp version like '4.11' (in group 1) or 'master' or 'main' (in group 2)
-branch_pattern = re.compile(r"\D+[-\/](\d\.\d+)\D?|.*\-(master|main)\-.*")
+# extracts the first ocp version like '4.11' (in group 1) or 'master' or 'main' (in group 2)
+branch_pattern = re.compile(r".*?\D+[-\/](\d\.\d+)\D?.*|.*\-(master|main)\-.*")
 
 
 def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_build_id: str, ci_operator_log_str: str) -> List[Dict]:
