@@ -131,6 +131,8 @@ class JUnitTestRecord(NamedTuple):
     upgrade: str
     variants: List[str]
 
+    flake_count: int
+
 
 class CiOperatorLogRecord(NamedTuple):
     schema_level: int
@@ -432,6 +434,7 @@ class JUnitHandler(sax.handler.ContentHandler):
         self.prowjob_build_id = prowjob_build_id
         self.file_path = file_path
         self.record_dicts: List[Dict] = list()
+        self.flake_count: Dict[str, int] = dict()
 
         branch_match = branch_pattern.match(self.prowjob_name)
         if branch_match:
@@ -466,8 +469,12 @@ class JUnitHandler(sax.handler.ContentHandler):
     def endElement(self, name):
         if name == 'failure':
             self.test_success = False
+            current_flake_count = self.flake_count.get(self.test_id, 0)
+            self.flake_count[self.test_id] = current_flake_count + 1
         elif name == 'error':
             self.test_success = False
+            current_flake_count = self.flake_count.get(self.test_id, 0)
+            self.flake_count[self.test_id] = current_flake_count + 1
         elif name == 'skipped':
             self.test_skipped = True
         elif name == 'testcase':
@@ -490,8 +497,13 @@ class JUnitHandler(sax.handler.ContentHandler):
                 arch=determine_prowjob_architecture(lc),
                 upgrade=determine_prowjob_upgrade(lc),
                 variants=determine_other_variants(lc),
+                flake_count=self.flake_count.get(self.test_id, 0) if self.test_success else 0
             )
             self.record_dicts.append(record._asdict())
+            if record.flake_count > 0:
+                # The preceding failures were counted alongside a success. We don't
+                # expect to see this test_id again, so save memory.
+                self.flake_count.pop(self.test_id)
 
     def endElementNS(self, name, qname):
         self.endElement(name)
