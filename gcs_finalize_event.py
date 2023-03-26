@@ -318,7 +318,7 @@ def get_platform_variants() -> List[VariantMatcher]:
         VariantMatcher('metal-assisted', '-metal-assisted'),
         VariantMatcher('metal-assisted', '-metal.*-single-node'),
     ]
-    for platform_name in ['alibaba', 'aws', 'azure', 'gcp', 'libvirt', 'openstack', 'ovirt', 'vsphere-upi', 'vsphere', 'metal-ipi', 'metal-upi']:
+    for platform_name in ['alibaba', 'aws', 'azure', 'gcp', 'libvirt', 'openstack', 'ovirt', 'vsphere-upi', 'vsphere', 'metal-ipi', 'metal-upi', 'ibmcloud']:
         PLATFORM_VARIANTS.append(VariantMatcher(platform_name, f'-{platform_name}'))
     return PLATFORM_VARIANTS
 
@@ -384,7 +384,7 @@ def get_upgrade_variants() -> List[VariantMatcher]:
     if UPGRADE_VARIANTS:
         return UPGRADE_VARIANTS
     UPGRADE_VARIANTS = [
-        VariantMatcher('upgrade-minor', '-upgrade-minor'),
+        VariantMatcher('upgrade-minor', '-upgrade.*-minor'),
         VariantMatcher('upgrade-micro', '-upgrade'),
     ]
     return UPGRADE_VARIANTS
