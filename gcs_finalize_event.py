@@ -117,6 +117,7 @@ class JUnitTestRecord(NamedTuple):
 
     test_id: str
     test_name: str
+    testsuite: str
     duration_ms: int
     success: bool
     success_val: int
@@ -497,7 +498,8 @@ class JUnitHandler(sax.handler.ContentHandler):
                 arch=determine_prowjob_architecture(lc),
                 upgrade=determine_prowjob_upgrade(lc),
                 variants=determine_other_variants(lc),
-                flake_count=self.flake_count.get(self.test_id, 0) if self.test_success else 0
+                flake_count=self.flake_count.get(self.test_id, 0) if self.test_success else 0,
+                testsuite=self.testsuite,
             )
             self.record_dicts.append(record._asdict())
             if record.flake_count > 0:
