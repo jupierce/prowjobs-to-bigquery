@@ -454,6 +454,12 @@ class JUnitHandler(sax.handler.ContentHandler):
     def startElement(self, name, attrs):
         if name == 'testsuite':
             self.testsuite = attrs.get('name', '')
+
+            if self.testsuite.startswith('OOMCheck'):
+                # OOMCheck creates randomized suite names like OOMCheck-collector-<nonce> , OOMCheck-scanner-db-<nonce>.
+                # Lop off the nonce so we can effectively GROUP BY on this column.
+                self.testsuite = 'OOMCheck'
+
         elif name == 'testcase':
             self.test_name: str = attrs.get('name')
             id_match = test_id_pattern.match(self.test_name)  # Does the test has a test_id override?
