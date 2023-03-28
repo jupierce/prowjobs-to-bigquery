@@ -21,7 +21,7 @@ CI_OPERATOR_LOGS_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.ci_operator_logs
 CI_OPERATOR_LOGS_SCHEMA_LEVEL = 10
 
 JUNIT_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.junit'
-JUNIT_TABLE_SCHEMA_LEVEL = 11
+JUNIT_TABLE_SCHEMA_LEVEL = 12
 
 # Using globals is ugly, but when running in cold load mode, these will be set for each separate process.
 # https://stackoverflow.com/questions/10117073/how-to-use-initializer-to-set-up-my-multiprocess-pool
@@ -131,6 +131,7 @@ class JUnitTestRecord(NamedTuple):
     arch: str
     upgrade: str
     variants: List[str]
+    flat_variants: str
 
     flake_count: int
 
@@ -418,7 +419,7 @@ def determine_other_variants(lowercase_prowjob_name: str) -> List[str]:
         if pv.matches(lowercase_prowjob_name):
             other.append(pv.name)
 
-    return other
+    return sorted(other)
 
 
 class FlakeInfo:
@@ -509,6 +510,7 @@ class JUnitHandler(sax.handler.ContentHandler):
                     pass
 
             lc = self.prowjob_name.lower()
+            other_variants = determine_other_variants(lc)
             record = JUnitTestRecord(
                 prowjob_build_id=self.prowjob_build_id,
                 file_path=self.file_path,
@@ -526,7 +528,8 @@ class JUnitHandler(sax.handler.ContentHandler):
                 platform=determine_prowjob_platform(lc),
                 arch=determine_prowjob_architecture(lc),
                 upgrade=determine_prowjob_upgrade(lc),
-                variants=determine_other_variants(lc),
+                variants=other_variants,
+                flat_variants=','.join(other_variants),
                 flake_count=flake_count_to_record,
                 testsuite=self.testsuite,
             )
