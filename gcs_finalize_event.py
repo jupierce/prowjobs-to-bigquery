@@ -421,6 +421,12 @@ def determine_other_variants(lowercase_prowjob_name: str) -> List[str]:
     return other
 
 
+class FlakeInfo:
+    def __init__(self):
+        self.flake_count = 0
+        self.has_succeeded = False
+
+
 class JUnitHandler(sax.handler.ContentHandler):
 
     def __init__(self, modified_time: str, prowjob_name: str, prowjob_build_id: str, file_path: str):
@@ -435,7 +441,7 @@ class JUnitHandler(sax.handler.ContentHandler):
         self.prowjob_build_id = prowjob_build_id
         self.file_path = file_path
         self.record_dicts: List[Dict] = list()
-        self.flake_count: Dict[str, int] = dict()
+        self.flake_info: Dict[str, FlakeInfo] = dict()
 
         branch_match = branch_pattern.match(self.prowjob_name)
         if branch_match:
@@ -468,17 +474,34 @@ class JUnitHandler(sax.handler.ContentHandler):
         self.startElement(name, attributes)
 
     def endElement(self, name):
+
         if name == 'failure':
             self.test_success = False
-            current_flake_count = self.flake_count.get(self.test_id, 0)
-            self.flake_count[self.test_id] = current_flake_count + 1
         elif name == 'error':
             self.test_success = False
-            current_flake_count = self.flake_count.get(self.test_id, 0)
-            self.flake_count[self.test_id] = current_flake_count + 1
         elif name == 'skipped':
             self.test_skipped = True
         elif name == 'testcase':
+
+            flake_count_to_record = 0
+            test_flake_info = self.flake_info.get(self.test_id, FlakeInfo())
+            if not self.test_success:
+                # Set a flag telling any subsequent failure that it should count itself as a flake.
+                test_flake_info.has_succeeded = True
+                # We know that any preceding failure is now considered a flake. Record the count.
+                flake_count_to_record = test_flake_info.flake_count
+                # Restart the count in case there are other failures which happen after this success.
+                test_flake_info.flake_count = 0
+            else:
+                test_flake_info.flake_count += 1
+                if test_flake_info.has_succeeded:  # There was a success which occurred before this failure
+                    flake_count_to_record = test_flake_info.flake_count   # Record this failure as a flake and any failures that preceded it.
+                    test_flake_info.flake_count = 0
+                else:
+                    # The test has not succeeded in this file yet, so we don't know if this particular failure
+                    # is a flake or not. Just keep the count rolling upward in flake_count in case we hit a success.
+                    pass
+
             lc = self.prowjob_name.lower()
             record = JUnitTestRecord(
                 prowjob_build_id=self.prowjob_build_id,
@@ -498,14 +521,10 @@ class JUnitHandler(sax.handler.ContentHandler):
                 arch=determine_prowjob_architecture(lc),
                 upgrade=determine_prowjob_upgrade(lc),
                 variants=determine_other_variants(lc),
-                flake_count=self.flake_count.get(self.test_id, 0) if self.test_success else 0,
+                flake_count=flake_count_to_record,
                 testsuite=self.testsuite,
             )
             self.record_dicts.append(record._asdict())
-            if record.flake_count > 0:
-                # The preceding failures were counted alongside a success. We don't
-                # expect to see this test_id again, so save memory.
-                self.flake_count.pop(self.test_id)
 
     def endElementNS(self, name, qname):
         self.endElement(name)
