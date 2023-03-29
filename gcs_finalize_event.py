@@ -419,6 +419,9 @@ def determine_other_variants(lowercase_prowjob_name: str) -> List[str]:
         if pv.matches(lowercase_prowjob_name):
             other.append(pv.name)
 
+    if not other:
+        other.append('standard')
+
     return sorted(other)
 
 
