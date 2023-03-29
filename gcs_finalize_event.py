@@ -396,8 +396,7 @@ def determine_prowjob_upgrade(lowercase_prowjob_name: str) -> Optional[str]:
     for pv in get_upgrade_variants():
         if pv.matches(lowercase_prowjob_name):
             return pv.name
-
-    return ''  # Don't return None. This will lead bigquery CONCAT to return null if it contains the value.
+    return 'no-upgrade'
 
 
 OTHER_VARIANTS: Optional[List[VariantMatcher]] = None
