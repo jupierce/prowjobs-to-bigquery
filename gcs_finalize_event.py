@@ -21,7 +21,7 @@ CI_OPERATOR_LOGS_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.ci_operator_logs
 CI_OPERATOR_LOGS_SCHEMA_LEVEL = 10
 
 JUNIT_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.junit'
-JUNIT_TABLE_SCHEMA_LEVEL = 12
+JUNIT_TABLE_SCHEMA_LEVEL = 14
 
 # Using globals is ugly, but when running in cold load mode, these will be set for each separate process.
 # https://stackoverflow.com/questions/10117073/how-to-use-initializer-to-set-up-my-multiprocess-pool
@@ -465,11 +465,11 @@ class JUnitHandler(sax.handler.ContentHandler):
             self.test_name: str = attrs.get('name')
             id_match = test_id_pattern.match(self.test_name)  # Does the test has a test_id override?
             if id_match:
-                tid = id_match.group(1)
+                self.test_id = id_match.group(1)
             else:
-                tid = hashlib.md5(self.test_name.encode('utf-8')).hexdigest()
+                test_hash = hashlib.md5(self.test_name.encode('utf-8')).hexdigest()
+                self.test_id = f'{self.testsuite}:{test_hash}'
 
-            self.test_id = tid
             try:
                 self.test_duration_ms = int(float(attrs.get('time', '0.0')) * 1000)
             except ValueError:
