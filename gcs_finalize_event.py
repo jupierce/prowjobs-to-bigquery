@@ -11,6 +11,7 @@ from xml import sax
 from io import StringIO
 from typing import NamedTuple, List, Dict, Optional
 from model import Model, Missing, ListModel
+from collections import defaultdict
 
 from google.cloud import bigquery, storage
 
@@ -43,7 +44,7 @@ def process_connection_setup():
     global global_storage_client
     global global_origin_ci_test_bucket_client
     global global_bq_client
-    global_storage_client = storage.Client()
+    global_storage_client = storage.Client(project='openshift-gce-devel')
     global_origin_ci_test_bucket_client = global_storage_client.bucket('origin-ci-test')
     global_bq_client = bigquery.Client()
 
@@ -444,7 +445,7 @@ class JUnitHandler(sax.handler.ContentHandler):
         self.prowjob_build_id = prowjob_build_id
         self.file_path = file_path
         self.record_dicts: List[Dict] = list()
-        self.flake_info: Dict[str, FlakeInfo] = dict()
+        self.flake_info: defaultdict[str, FlakeInfo] = defaultdict(FlakeInfo)
 
         branch_match = branch_pattern.match(self.prowjob_name)
         if branch_match:
@@ -493,8 +494,8 @@ class JUnitHandler(sax.handler.ContentHandler):
         elif name == 'testcase':
 
             flake_count_to_record = 0
-            test_flake_info = self.flake_info.get(self.test_id, FlakeInfo())
-            if not self.test_success:
+            test_flake_info = self.flake_info[self.test_id]
+            if self.test_success:
                 # Set a flag telling any subsequent failure that it should count itself as a flake.
                 test_flake_info.has_succeeded = True
                 # We know that any preceding failure is now considered a flake. Record the count.
@@ -986,6 +987,9 @@ if __name__ == '__main__':
     # print(yaml.dump(outcome))
     # parse_prowjob_json(pathlib.Path("prowjobs/payload-pr.json").read_text())
 
+    process_connection_setup()
+    parse_junit_from_gcs_file_path('logs/periodic-ci-openshift-release-master-ci-4.14-e2e-gcp-sdn/1640905778267164672/artifacts/e2e-gcp-sdn/openshift-e2e-test/artifacts/junit/junit_e2e__20230329-031207.xml')
+
     #cold_load_all_ci_operator_logs()
-    cold_load_junit()
+    #cold_load_junit()
 
