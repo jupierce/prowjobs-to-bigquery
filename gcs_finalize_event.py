@@ -19,7 +19,7 @@ from google.cloud import bigquery, storage
 JOBS_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.jobs'
 
 CI_OPERATOR_LOGS_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.ci_operator_logs'
-CI_OPERATOR_LOGS_SCHEMA_LEVEL = 10
+CI_OPERATOR_LOGS_SCHEMA_LEVEL = 11
 
 JUNIT_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.junit'
 JUNIT_TABLE_SCHEMA_LEVEL = 14
@@ -144,6 +144,7 @@ class CiOperatorLogRecord(NamedTuple):
     test_name: str  # multi-stage-test name when multi-stage
     step_name: Optional[str]  # if a step was being run
     build_name: Optional[str]  # if a build is being run
+    slice_name: Optional[str]  # if a slice is being acquired
     lease_name: Optional[str]  # if a lease is being acquired
     started_at: str
     finished_at: str
@@ -224,6 +225,7 @@ def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_buil
 
         if m.group('acquired_slice_name'):
             slice_name = m.group('acquired_slice_name')
+            lease_name = m.group('lease_names')
             if slice_name in lease_start:
                 start_time = lease_start.pop(slice_name)
             else:
@@ -235,7 +237,8 @@ def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_buil
                 file_path=ci_operator_log_file,
                 step_name=None,
                 build_name=None,
-                lease_name=slice_name,
+                slice_name=slice_name,
+                lease_name=lease_name,
                 started_at=start_time,
                 finished_at=dt,
                 duration_ms=ms_diff_from_time_strs(start_time, dt),
@@ -257,6 +260,7 @@ def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_buil
                     file_path=ci_operator_log_file,
                     step_name=None,
                     build_name=m.group('build_name_outcome'),
+                    slice_name=None,
                     lease_name=None,
                     started_at=start_time,
                     finished_at=dt,
@@ -278,6 +282,7 @@ def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_buil
                 file_path=ci_operator_log_file,
                 step_name=m.group('step_name_outcome')[len(multi_stage_test_name)+1:],  # Strip off multi-stage test name prefix to just leave registry step name
                 build_name=None,
+                slice_name=None,
                 lease_name=None,
                 started_at=start_time,
                 finished_at=dt,
@@ -987,9 +992,8 @@ if __name__ == '__main__':
     # print(yaml.dump(outcome))
     # parse_prowjob_json(pathlib.Path("prowjobs/payload-pr.json").read_text())
 
-    process_connection_setup()
-    parse_junit_from_gcs_file_path('logs/periodic-ci-openshift-release-master-ci-4.14-e2e-gcp-sdn/1640905778267164672/artifacts/e2e-gcp-sdn/openshift-e2e-test/artifacts/junit/junit_e2e__20230329-031207.xml')
+    #process_connection_setup()
+    #parse_junit_from_gcs_file_path('logs/periodic-ci-openshift-release-master-ci-4.14-e2e-gcp-sdn/1640905778267164672/artifacts/e2e-gcp-sdn/openshift-e2e-test/artifacts/junit/junit_e2e__20230329-031207.xml')
 
-    #cold_load_all_ci_operator_logs()
+    cold_load_all_ci_operator_logs()
     #cold_load_junit()
-
