@@ -18,6 +18,9 @@ from google.cloud import bigquery, storage
 # Destination for parsed prowjob info
 JOBS_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.jobs'
 
+RELEASEINFO_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.job_releases'
+RELEASEINFO_SCHEMA_LEVEL = 2
+
 CI_OPERATOR_LOGS_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.ci_operator_logs'
 CI_OPERATOR_LOGS_SCHEMA_LEVEL = 11
 
@@ -81,6 +84,21 @@ class JobsRecord(NamedTuple):
     manager: str
     schema_level: int
     retest: str
+
+
+class JobReleaseRecord(NamedTuple):
+    prowjob_name: str
+    prowjob_build_id: str
+    release_name: str
+    release_digest: str
+    release_created: str
+    machine_os: str
+    tag_name: str
+    tag_source_location: str
+    tag_commit_id: str
+    tag_image: str
+    is_pr: bool
+    schema_level: int
 
 
 def or_none(v):
@@ -186,12 +204,53 @@ log_entry_pattern = re.compile(combined_pattern)
 
 # Group 1 extracts path up to prowjob id (e.g. 	branch-ci-openshift-jenkins-release-4.10-images/1604867803796475904 ).
 # Group 2 extracts prowjob name
-# Group 3 extracts the prowjob numeric id
-junit_path_pattern = re.compile(r"^(.*?\/([^\/]+)\/(\d+))\/.*\/?junit[^\/]+xml$")
+# Group 3 extracts the prowjob numeric id  (requires id be at least 12 digits to avoid finding PR number)
+junit_path_pattern = re.compile(r"^(.*?\/([^\/]+)\/(\d{12,}))\/.*\/?junit[^\/]+xml$")
 test_id_pattern = re.compile(r"^.*{([a-f0-9]+)}.*$")
+
+# Group 1 extracts path up to prowjob id (e.g. 	branch-ci-openshift-jenkins-release-4.10-images/1604867803796475904 ).
+# Group 2 extracts prowjob name
+# Group 3 extracts the prowjob numeric id (requires id be at least 12 digits to avoid finding PR number)
+releaseinfo_path_pattern = re.compile(r"^(.*?\/([^\/]+)\/(\d{12,}))\/.*\/?releaseinfo\.json$")
 
 # extracts the first ocp version like '4.11' (in group 1) or 'master' or 'main' (in group 2)
 branch_pattern = re.compile(r".*?\D+[-\/](\d\.\d+)\D?.*|.*\-(master|main)\-.*")
+
+
+def parse_releaseinfo_json(prowjob_name: str, prowjob_build_id: str, releaseinfo_json_text: str, is_pr: bool) -> Optional[List[Dict]]:
+    try:
+        releaseinfo_dict = json.loads(releaseinfo_json_text)
+    except:
+        print(f'Found invalid releaseinfo.json')
+        return None
+
+    releaseinfo = Model(releaseinfo_dict)
+    release_digest = releaseinfo.digest
+    release_created = releaseinfo.config.created
+    release_name = releaseinfo.metadata.version
+    machine_os = releaseinfo.displayVersions['machine-os'].Version
+
+    records: List[Dict] = list()
+
+    for tag in releaseinfo.references.spec.tags:
+        jr = JobReleaseRecord(
+            prowjob_name=prowjob_name,
+            prowjob_build_id=prowjob_build_id,
+            release_digest=release_digest,
+            release_created=to_ts(release_created),
+            release_name=release_name,
+            tag_image=tag['from'].name,
+            tag_name=tag.name,
+            tag_source_location=tag.annotations['io.openshift.build.source-location'],
+            tag_commit_id=tag.annotations['io.openshift.build.commit.id'],
+            machine_os=machine_os,
+            is_pr=is_pr,
+            schema_level=RELEASEINFO_SCHEMA_LEVEL,
+        )
+        record = dict(jr._asdict())
+        records.append(record)
+
+    return records
 
 
 def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_build_id: str, ci_operator_log_str: str) -> List[Dict]:
@@ -690,6 +749,15 @@ def parse_prowjob_from_gcs(file_path: str):
 junk_bytes_pattern = re.compile(r'[^\x20-\x7E]+')
 
 
+def parse_releaseinfo_from_gcs(prowjob_name: str, prowjob_build_id: str, file_path: str) -> Optional[List[Dict]]:
+    b = global_origin_ci_test_bucket_client.get_blob(file_path)
+    if not b:
+        return None
+    is_pr = '/pull/' in file_path
+    releaseinfo_json_text = b.download_as_text()
+    return parse_releaseinfo_json(prowjob_name, prowjob_build_id, releaseinfo_json_text, is_pr=is_pr)
+
+
 def parse_junit_from_gcs(prowjob_name: str, prowjob_build_id: str, file_path: str):
 
     if file_path.endswith('junit_operator.xml'):
@@ -752,7 +820,7 @@ def parse_junit_from_gcs_file_path(file_path: str) -> List[Dict]:
             junit_records = parse_junit_from_gcs(prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id,
                                                  file_path=file_path)
 
-            # There are a huge number of junit records to send. When all records are passed by the to the main
+            # There are a huge number of junit records to send. When all records are passed by the main
             # thread, the number of records grows so large that memory is exhausted. To help with that,
             # each thread, if it has a significant number of records, will make its own bigquery insert.
 
@@ -768,6 +836,31 @@ def parse_junit_from_gcs_file_path(file_path: str) -> List[Dict]:
     return []
 
 
+def parse_releaseinfo_from_gcs_file_path(file_path: str) -> List[Dict]:
+    try:
+        releaseinfo_match = releaseinfo_path_pattern.match(file_path)
+        if releaseinfo_match:
+            prowjob_name = releaseinfo_match.group(2)
+            prowjob_build_id = releaseinfo_match.group(3)
+            return parse_releaseinfo_from_gcs(prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id, file_path=file_path)
+    except Exception as e:
+        print(f'\n\nError while processing releaseinfo: {file_path}')
+        traceback.print_exc()
+    return []
+
+
+def process_releaseinfo_from_gcs_file_path(file_path: str):
+    record_dicts = parse_releaseinfo_from_gcs_file_path(file_path)
+    if not record_dicts:
+        return
+    bq = bigquery.Client()
+    errors = bq.insert_rows_json(RELEASEINFO_TABLE_ID, record_dicts)
+    if errors == []:
+        print("New rows have been added.")
+    else:
+        raise IOError("Encountered errors while inserting rows: {}".format(errors))
+
+
 def process_prowjob_from_gcs(file_path: str):
     record_dict = parse_prowjob_from_gcs(file_path)
     if not record_dict:
@@ -778,6 +871,18 @@ def process_prowjob_from_gcs(file_path: str):
         print("New rows have been added.")
     else:
         raise IOError("Encountered errors while inserting rows: {}".format(errors))
+
+
+def process_releaseinfo_from_gcs(build_id: str, file_path: str):
+    releaseinfo_records = parse_releaseinfo_from_gcs(build_id, file_path)
+    if not releaseinfo_records:
+        return
+    bq = bigquery.Client()
+    errors = bq.insert_rows_json(CI_OPERATOR_LOGS_TABLE_ID, releaseinfo_records)
+    if errors == []:
+        print("New releaseinfo rows have been added.")
+    else:
+        raise IOError("Encountered errors while inserting releaseinfo rows: {}".format(errors))
 
 
 def gcs_finalize(event, context):
@@ -805,6 +910,8 @@ def gcs_finalize(event, context):
             prowjob_name = junit_match.group(2)
             prowjob_build_id = junit_match.group(3)
             process_junit_file_from_gcs(prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id, file_path=gcs_file_name)
+    elif gcs_file_name.endswith('/releaseinfo.json'):
+        process_releaseinfo_from_gcs_file_path(gcs_file_name)
 
 
 # Pool cannot serialize a row for the other processes, so just extract the filename
@@ -992,8 +1099,10 @@ if __name__ == '__main__':
     # print(yaml.dump(outcome))
     # parse_prowjob_json(pathlib.Path("prowjobs/payload-pr.json").read_text())
 
-    #process_connection_setup()
+    process_connection_setup()
     #parse_junit_from_gcs_file_path('logs/periodic-ci-openshift-release-master-ci-4.14-e2e-gcp-sdn/1640905778267164672/artifacts/e2e-gcp-sdn/openshift-e2e-test/artifacts/junit/junit_e2e__20230329-031207.xml')
 
-    cold_load_all_ci_operator_logs()
+    #cold_load_all_ci_operator_logs()
+
+    process_releaseinfo_from_gcs_file_path('pr-logs/pull/openshift_release/40864/rehearse-40864-pull-ci-openshift-cluster-api-release-4.11-e2e-aws/1675182964247367680/artifacts/e2e-aws/gather-extra/artifacts/releaseinfo.json')
     #cold_load_junit()
