@@ -863,7 +863,7 @@ def parse_junit_pr_from_gcs_file_path(file_path: str) -> List[Dict]:
             # thread, the number of records grows so large that memory is exhausted. To help with that,
             # each thread, if it has a significant number of records, will make its own bigquery insert.
 
-            if junit_records and len(junit_records) > 50:  # Pass small count updates back to the main thread to be grouped
+            if junit_records and len(junit_records) > 50 and len(junit_records) < 1000:  # Pass small count updates back to the main thread to be grouped
                 errors = global_bq_client.insert_rows_json(JUNIT_PR_TABLE_ID, junit_records)
                 if errors != []:
                     print(f'ERROR: thread could not insert records: {errors}')
@@ -1179,18 +1179,20 @@ def cold_load_junit_pr():
     total_inserts = 0
 
     def send_inserts():
+        nonlocal inserts
         if not inserts:  # No items to insert?
             return 0
-        count = len(inserts)
+        subset = inserts[:1000]  # Prevent update too large errors
+        inserts = inserts[1000:]
+        count = len(subset)
         try:
-            errors = bq.insert_rows_json(JUNIT_PR_TABLE_ID, inserts)
+            errors = bq.insert_rows_json(JUNIT_PR_TABLE_ID, subset)
             if errors == []:
                 print(f"New rows have been added: {count}")
             else:
                 raise IOError("Encountered errors while inserting rows: {}".format(errors))
         except Exception as e:
             print(f'Error inserting rows: {e}')
-        inserts.clear()
         return count
 
     print(f'All remaining: {len(remaining_paths)}')
@@ -1208,7 +1210,7 @@ def cold_load_junit_pr():
                 continue
 
             inserts.extend(val)
-            if len(inserts) > 1000:
+            while len(inserts) > 1000:
                 total_inserts += send_inserts()
 
         total_inserts += send_inserts()
