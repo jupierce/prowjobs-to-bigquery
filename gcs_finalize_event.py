@@ -27,6 +27,8 @@ CI_OPERATOR_LOGS_SCHEMA_LEVEL = 11
 JUNIT_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.junit'
 JUNIT_TABLE_SCHEMA_LEVEL = 14
 
+JUNIT_PR_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.junit_pr'
+
 # Using globals is ugly, but when running in cold load mode, these will be set for each separate process.
 # https://stackoverflow.com/questions/10117073/how-to-use-initializer-to-set-up-my-multiprocess-pool
 global_storage_client = None
@@ -794,6 +796,18 @@ def process_junit_file_from_gcs(prowjob_name: str, prowjob_build_id: str, file_p
         raise IOError("Encountered errors while inserting rows: {}".format(errors))
 
 
+def process_pr_junit_file_from_gcs(prowjob_name: str, prowjob_build_id: str, file_path: str):
+    junit_records = parse_junit_from_gcs(prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id, file_path=file_path)
+    if not junit_records:
+        return
+    bq = bigquery.Client()
+    errors = bq.insert_rows_json(JUNIT_PR_TABLE_ID, junit_records)
+    if errors == []:
+        print(f"New rows have been added: {len(junit_records)}.")
+    else:
+        raise IOError("Encountered errors while inserting rows: {}".format(errors))
+
+
 def process_ci_operator_log_from_gcs(build_id: str, file_path: str):
     ci_operator_log_records = parse_ci_operator_log_resources_from_gcs(build_id, file_path)
     if not ci_operator_log_records:
@@ -826,6 +840,31 @@ def parse_junit_from_gcs_file_path(file_path: str) -> List[Dict]:
 
             if junit_records and len(junit_records) > 50:  # Pass small count updates back to the main thread to be grouped
                 errors = global_bq_client.insert_rows_json(JUNIT_TABLE_ID, junit_records)
+                if errors != []:
+                    print(f'ERROR: thread could not insert records: {errors}')
+                junit_records.clear()
+            return junit_records
+    except Exception as e:
+        print(f'\n\nError while processing: {file_path}')
+        traceback.print_exc()
+    return []
+
+
+def parse_junit_pr_from_gcs_file_path(file_path: str) -> List[Dict]:
+    try:
+        junit_match = junit_path_pattern.match(file_path)
+        if junit_match:
+            prowjob_name = junit_match.group(2)
+            prowjob_build_id = junit_match.group(3)
+            junit_records = parse_junit_from_gcs(prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id,
+                                                 file_path=file_path)
+
+            # There are a huge number of junit records to send. When all records are passed by the main
+            # thread, the number of records grows so large that memory is exhausted. To help with that,
+            # each thread, if it has a significant number of records, will make its own bigquery insert.
+
+            if junit_records and len(junit_records) > 50:  # Pass small count updates back to the main thread to be grouped
+                errors = global_bq_client.insert_rows_json(JUNIT_PR_TABLE_ID, junit_records)
                 if errors != []:
                     print(f'ERROR: thread could not insert records: {errors}')
                 junit_records.clear()
@@ -904,12 +943,17 @@ def gcs_finalize(event, context):
         prowjob_build_id = file_path.parent.name
         ci_operator_log_path = file_path.parent.joinpath('artifacts/ci-operator.log')
         process_ci_operator_log_from_gcs(prowjob_build_id, str(ci_operator_log_path))
-    elif gcs_file_name.endswith('.xml') and '/pull/' not in gcs_file_name:  # ignore junit from pull requests
+    elif gcs_file_name.endswith('.xml'):
         junit_match = junit_path_pattern.match(gcs_file_name)
         if junit_match:
             prowjob_name = junit_match.group(2)
             prowjob_build_id = junit_match.group(3)
-            process_junit_file_from_gcs(prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id, file_path=gcs_file_name)
+            if '/pull/' in gcs_file_name:
+                process_pr_junit_file_from_gcs(prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id,
+                                               file_path=gcs_file_name)
+            else:
+                process_junit_file_from_gcs(prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id,
+                                            file_path=gcs_file_name)
     elif gcs_file_name.endswith('/releaseinfo.json'):
         process_releaseinfo_from_gcs_file_path(gcs_file_name)
 
@@ -1093,6 +1137,89 @@ def cold_load_junit():
         pool.join()
 
 
+def cold_load_junit_pr():
+    bq = bigquery.Client()
+
+    remaining_paths = set()
+    cache_file = pathlib.Path('cache')
+    if cache_file.is_file():
+        with cache_file.open('r', encoding='utf-8') as c:
+            while True:
+                line = c.readline()
+                if not line:
+                    break
+                remaining_paths.add(line.strip())
+    else:
+        origin_ci_test_usage_table_id = 'openshift-gce-devel.ci_analysis_us.origin-ci-test_usage_analysis'
+        query_all_storage_junit_paths = f"""
+        SELECT DISTINCT cs_object FROM `{origin_ci_test_usage_table_id}`
+        WHERE time_micros > 1680901873000000 AND cs_object LIKE "%/junit%.xml" AND cs_method IN ("PUT", "POST") AND cs_object LIKE "%/pull/%"
+        """
+
+        junit_xml_paths = bq.query(query_all_storage_junit_paths)
+
+        query_all_processed_junit_paths = f"""
+        SELECT DISTINCT file_path FROM `{JUNIT_PR_TABLE_ID}` WHERE SCHEMA_LEVEL = {JUNIT_TABLE_SCHEMA_LEVEL}
+        """
+        junit_processed_xml_paths = bq.query(query_all_processed_junit_paths)
+
+        all_paths = set(lp['cs_object'] for lp in junit_xml_paths)
+        registered_paths = set(lp['file_path'] for lp in junit_processed_xml_paths)
+
+        print(f'All found paths: {len(all_paths)}')
+        print(f'Already registered paths: {len(registered_paths)}')
+        already_done = all_paths.intersection(registered_paths)
+        print(f'Already registered: {len(already_done)}')
+        remaining_paths = set(all_paths.difference(registered_paths))
+        with cache_file.open('w+', encoding='utf-8') as c:
+            for p in remaining_paths:
+                c.write(f'{p}\n')
+
+    inserts = []
+    total_inserts = 0
+
+    def send_inserts():
+        if not inserts:  # No items to insert?
+            return 0
+        count = len(inserts)
+        try:
+            errors = bq.insert_rows_json(JUNIT_PR_TABLE_ID, inserts)
+            if errors == []:
+                print(f"New rows have been added: {count}")
+            else:
+                raise IOError("Encountered errors while inserting rows: {}".format(errors))
+        except Exception as e:
+            print(f'Error inserting rows: {e}')
+        inserts.clear()
+        return count
+
+    print(f'All remaining: {len(remaining_paths)}')
+
+    total_file_count = len(remaining_paths)
+    print(f'{total_file_count} files need to be processed')
+
+    while len(remaining_paths) > 0:
+        p_count = multiprocessing.cpu_count()
+        pool = multiprocessing.Pool(p_count, process_connection_setup)
+        portion_to_process = list(remaining_paths)[:5000]
+        vals = pool.imap_unordered(parse_junit_pr_from_gcs_file_path, portion_to_process, chunksize=5)
+        for val in vals:
+            if not val:
+                continue
+
+            inserts.extend(val)
+            if len(inserts) > 1000:
+                total_inserts += send_inserts()
+
+        total_inserts += send_inserts()
+        remaining_paths.difference_update(portion_to_process)
+        print(f'Files remaining: {len(remaining_paths)}')
+        print(f'Total number of rows inserted: {total_inserts}')
+        print('CLOSING POOL')
+        pool.close()
+        pool.join()
+
+
 if __name__ == '__main__':
     # outcome = parse_ci_operator_graph_resources_json('abcdefg', pathlib.Path("ci-operator-graphs/ci-operator-step-graph-1.json").read_text())
     # import yaml
@@ -1104,5 +1231,6 @@ if __name__ == '__main__':
 
     #cold_load_all_ci_operator_logs()
 
-    process_releaseinfo_from_gcs_file_path('pr-logs/pull/openshift_release/40864/rehearse-40864-pull-ci-openshift-cluster-api-release-4.11-e2e-aws/1675182964247367680/artifacts/e2e-aws/gather-extra/artifacts/releaseinfo.json')
+    #process_releaseinfo_from_gcs_file_path('pr-logs/pull/openshift_release/40864/rehearse-40864-pull-ci-openshift-cluster-api-release-4.11-e2e-aws/1675182964247367680/artifacts/e2e-aws/gather-extra/artifacts/releaseinfo.json')
     #cold_load_junit()
+    cold_load_junit_pr()

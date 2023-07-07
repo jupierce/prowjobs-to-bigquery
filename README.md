@@ -12,16 +12,17 @@ SELECT * EXCEPT(schema_level) FROM `openshift-gce-devel.ci_analysis_us.ci_operat
 
 # Bulk load
 - Setup native table which contains access logs for origin-ci-test table. This is what the cold load system will read to find files of interest. You used a native table since external table would fail if corrupt CSVs existed.
+  - Use source of "Google Cloud Storage"
   - Pull from files: `origin-ci-test/origin-ci-test_usage_2*`
   - Auto detect schema
   - Tolerate some errors
   - CSV
   - ![img.png](img/img.png)
 
-Delete some of the unnecessary content from the analysis table:
+Delete some of the unnecessary content from the analysis table (NOTE MICROS not millis, add 000 to epoch):
 ```
-DELETE FROM `openshift-gce-devel.ci_analysis_us.origin-ci-test_usage_analysis` WHERE time_micros < 1664582400000 OR cs_method NOT IN ("PUT", "POST") or cs_user_agent = "GCS Lifecycle Management"
-```
+DELETE FROM `openshift-gce-devel.ci_analysis_us.origin-ci-test_usage_analysis` WHERE time_micros < 1664582400000000 OR cs_method NOT IN ("PUT", "POST") or cs_user_agent = "GCS Lifecycle Management"
+```                                                                                                
 - 
 - Change schema_version in gcs_finalize_event.py
 - Setup massive system in GCE running debian (e.g. n2-highcpu-96) - configure to runs as aos-kettle.
