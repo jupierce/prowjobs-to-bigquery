@@ -410,6 +410,7 @@ def get_arch_variants() -> List[VariantMatcher]:
     ARCH_VARIANTS = []
     for arch_name in ['heterogeneous', 'ppc64le', 'arm64', 's390x']:
         ARCH_VARIANTS.append(VariantMatcher(arch_name, f'-{arch_name}'))
+    ARCH_VARIANTS.append(VariantMatcher('arm64', f'-arm(?:-|$)'))  # periodic-ci-openshift-cluster-control-plane-machine-set-operator-release-4.14-periodics-e2e-aws-arm
     return ARCH_VARIANTS
 
 
@@ -760,7 +761,7 @@ def parse_releaseinfo_from_gcs(prowjob_name: str, prowjob_build_id: str, file_pa
     return parse_releaseinfo_json(prowjob_name, prowjob_build_id, releaseinfo_json_text, is_pr=is_pr)
 
 
-def parse_junit_from_gcs(prowjob_name: str, prowjob_build_id: str, file_path: str):
+def parse_junit_from_gcs(prowjob_name: str, prowjob_build_id: str, file_path: str) -> List[Dict]:
 
     if file_path.endswith('junit_operator.xml'):
         # This is ci-operator's junit. Not important for TRT atm.
@@ -801,7 +802,12 @@ def process_pr_junit_file_from_gcs(prowjob_name: str, prowjob_build_id: str, fil
     if not junit_records:
         return
     bq = bigquery.Client()
-    errors = bq.insert_rows_json(JUNIT_PR_TABLE_ID, junit_records)
+    errors = []
+    chunk_size = 1000  # bigquery will return 413 if incoming request is too large (10MB). Chunk the results if they are long
+    remaining_records = junit_records
+    while remaining_records:
+        chunk, remaining_records = remaining_records[:chunk_size], remaining_records[chunk_size:]
+        errors.extend(bq.insert_rows_json(JUNIT_PR_TABLE_ID, chunk))
     if errors == []:
         print(f"New rows have been added: {len(junit_records)}.")
     else:
