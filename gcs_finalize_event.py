@@ -166,6 +166,8 @@ class CiOperatorLogRecord(NamedTuple):
     build_name: Optional[str]  # if a build is being run
     slice_name: Optional[str]  # if a slice is being acquired
     lease_name: Optional[str]  # if a lease is being acquired
+    prowjob_cluster: Optional[str]
+    prowjob_cluster_namespace: Optional[str]
     started_at: str
     finished_at: str
     duration_ms: int
@@ -196,6 +198,8 @@ sub_expressions = [
     # - Step launch-ipi-conf succeeded after 30s
     # - Step launch-ipi-conf failed after 30s
     r"(Step (?P<step_name_outcome>[^\s]+) (?P<step_outcome>[^\s]+) after [^\"]+)",
+    # Extract build farm and ci-op namespace
+    r"(Using namespace .*\.(?P<prowjob_cluster>build\d+)\..*(?P<prowjob_cluster_namespace>ci-op.*))",
 ]
 
 combined_pattern = r"{\"level\":\"\w+\",\"msg\":\"(?:" + \
@@ -263,6 +267,8 @@ def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_buil
         return int((ts_stop - ts_start) / datetime.timedelta(milliseconds=1))
 
     log_records: List[Dict] = list()
+    prowjob_cluster = None
+    prowjob_cluster_namespace = None
     multi_stage_test_name = None
     build_start: Dict[str, str] = dict()
     step_start: Dict[str, str] = dict()
@@ -277,6 +283,12 @@ def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_buil
 
         if m.group('multi_stage_name'):
             multi_stage_test_name = m.group('multi_stage_name')
+
+        if m.group('prowjob_cluster'):
+            prowjob_cluster = m.group('prowjob_cluster')
+
+        if m.group('prowjob_cluster_namespace'):
+            prowjob_cluster_namespace = m.group('prowjob_cluster_namespace')
 
         # Leases
         if m.group('acquiring_test_name'):
@@ -306,6 +318,8 @@ def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_buil
                 prowjob_build_id=prowjob_build_id,
                 test_name=multi_stage_test_name,
                 success=True,
+                prowjob_cluster=prowjob_cluster,
+                prowjob_cluster_namespace=prowjob_cluster_namespace,
             )
             log_records.append(record._asdict())
 
@@ -329,6 +343,8 @@ def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_buil
                     prowjob_build_id=prowjob_build_id,
                     test_name=multi_stage_test_name,
                     success='succeeded' in log_line,
+                    prowjob_cluster=prowjob_cluster,
+                    prowjob_cluster_namespace=prowjob_cluster_namespace,
                 )
                 log_records.append(record._asdict())
 
@@ -351,6 +367,8 @@ def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_buil
                 prowjob_build_id=prowjob_build_id,
                 test_name=multi_stage_test_name,
                 success='succeeded' in m.group('step_outcome'),
+                prowjob_cluster=prowjob_cluster,
+                prowjob_cluster_namespace=prowjob_cluster_namespace,
             )
             log_records.append(record._asdict())
 
