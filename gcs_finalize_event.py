@@ -211,7 +211,8 @@ log_entry_pattern = re.compile(combined_pattern)
 # Group 1 extracts path up to prowjob id (e.g. 	branch-ci-openshift-jenkins-release-4.10-images/1604867803796475904 ).
 # Group 2 extracts prowjob name
 # Group 3 extracts the prowjob numeric id  (requires id be at least 12 digits to avoid finding PR number)
-junit_path_pattern = re.compile(r"^(.*?\/([^\/]+)\/(\d{12,}))\/.*\/?junit[^\/]+xml$")
+# Group 4 allows you to match different junit filenames you are interested in including
+junit_path_pattern = re.compile(r"^(.*?\/([^\/]+)\/(\d{12,}))\/.*\/?(junit|e2e-monitor-tests)[^\/]+xml$")
 test_id_pattern = re.compile(r"^.*{([a-f0-9]+)}.*$")
 
 # Group 1 extracts path up to prowjob id (e.g. 	branch-ci-openshift-jenkins-release-4.10-images/1604867803796475904 ).
@@ -472,7 +473,7 @@ def get_upgrade_variants() -> List[VariantMatcher]:
     if UPGRADE_VARIANTS:
         return UPGRADE_VARIANTS
     UPGRADE_VARIANTS = [
-        VariantMatcher('upgrade-minor', '-upgrade.*-minor'),
+        VariantMatcher('upgrade-minor', '-upgrade.*-minor|-upgrade-from'),
         VariantMatcher('upgrade-micro', '-upgrade'),
     ]
     return UPGRADE_VARIANTS
