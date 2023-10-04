@@ -56,23 +56,25 @@ def process_connection_setup(bucket_project: Optional[str] = None, bucket: str =
     global junit_table_id
     global junit_pr_table_id
 
-    if not bucket_project:
-        # If it was not specified, try to autodetect google cloud project based on bucket name.
-        if bucket == 'origin-ci-test':
-            bucket_project = 'openshift-gce-devel'
-        elif bucket == 'qe-private-deck':
-            bucket_project = 'openshift-ci-private'
+    if not global_storage_client:
 
-    if bucket == 'qe-private-deck':
-        jobs_table_id = 'openshift-gce-devel.ci_analysis_us.qe_jobs'
-        releaseinfo_table = 'openshift-gce-devel.ci_analysis_us.qe_job_releases'
-        ci_operator_logs_table_id = 'openshift-gce-devel.ci_analysis_us.qe_ci_operator_logs'
-        junit_table_id = 'openshift-gce-devel.ci_analysis_us.qe_junit'
-        junit_pr_table_id = 'openshift-gce-devel.ci_analysis_us.qe_junit_pr'
+        if not bucket_project:
+            # If it was not specified, try to autodetect google cloud project based on bucket name.
+            if bucket == 'origin-ci-test':
+                bucket_project = 'openshift-gce-devel'
+            elif bucket == 'qe-private-deck':
+                bucket_project = 'openshift-ci-private'
 
-    global_storage_client = storage.Client(project=bucket_project)
-    global_origin_ci_test_bucket_client = global_storage_client.bucket(bucket)
-    global_bq_client = bigquery.Client()
+        if bucket == 'qe-private-deck':
+            jobs_table_id = 'openshift-gce-devel.ci_analysis_us.qe_jobs'
+            releaseinfo_table = 'openshift-gce-devel.ci_analysis_us.qe_job_releases'
+            ci_operator_logs_table_id = 'openshift-gce-devel.ci_analysis_us.qe_ci_operator_logs'
+            junit_table_id = 'openshift-gce-devel.ci_analysis_us.qe_junit'
+            junit_pr_table_id = 'openshift-gce-devel.ci_analysis_us.qe_junit_pr'
+
+        global_storage_client = storage.Client(project=bucket_project)
+        global_origin_ci_test_bucket_client = global_storage_client.bucket(bucket)
+        global_bq_client = bigquery.Client()
 
 
 class JobsRecord(NamedTuple):
@@ -221,10 +223,6 @@ sub_expressions = [
     r"(Step (?P<step_name_outcome>[^\s]+) (?P<step_outcome>[^\s]+) after [^\"]+)",
     # Extract build farm and ci-op namespace
     r"(Using namespace .*\.(?P<prowjob_cluster>build\d+)\..*(?P<prowjob_cluster_namespace>ci-op.*))",
-    # Extract ci-operator version
-    r"(ci-operator version (?P<ci_operator_version>v[^\"]+))",
-    # Extract openshift/release commit
-    r"(ci-operator version (?P<ci_operator_version>v[^\"]+))",
 ]
 
 combined_pattern = r"{\"level\":\"\w+\",\"msg\":\"(?:" + \
@@ -1273,17 +1271,28 @@ def cold_load_junit_pr():
         pool.join()
 
 
+def cold_load_qe():
+    qe_bucket = 'qe-private-deck'
+    process_connection_setup(bucket=qe_bucket)
+    for blob in global_storage_client.list_blobs(qe_bucket):
+        event = {
+            'bucket': qe_bucket,
+            'name': blob.name
+        }
+        gcs_finalize(event, None)
+
+
 if __name__ == '__main__':
     # outcome = parse_ci_operator_graph_resources_json('abcdefg', pathlib.Path("ci-operator-graphs/ci-operator-step-graph-1.json").read_text())
     # import yaml
     # print(yaml.dump(outcome))
     # parse_prowjob_json(pathlib.Path("prowjobs/payload-pr.json").read_text())
 
-    process_connection_setup()
+    #process_connection_setup()
     #parse_junit_from_gcs_file_path('logs/periodic-ci-openshift-release-master-ci-4.14-e2e-gcp-sdn/1640905778267164672/artifacts/e2e-gcp-sdn/openshift-e2e-test/artifacts/junit/junit_e2e__20230329-031207.xml')
 
     #cold_load_all_ci_operator_logs()
 
     #process_releaseinfo_from_gcs_file_path('pr-logs/pull/openshift_release/40864/rehearse-40864-pull-ci-openshift-cluster-api-release-4.11-e2e-aws/1675182964247367680/artifacts/e2e-aws/gather-extra/artifacts/releaseinfo.json')
     #cold_load_junit()
-    cold_load_junit_pr()
+    cold_load_qe()
