@@ -16,18 +16,18 @@ from collections import defaultdict
 from google.cloud import bigquery, storage
 
 # Destination for parsed prowjob info
-JOBS_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.jobs'
+jobs_table_id = 'openshift-gce-devel.ci_analysis_us.jobs'
 
-RELEASEINFO_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.job_releases'
+releaseinfo_table = 'openshift-gce-devel.ci_analysis_us.job_releases'
 RELEASEINFO_SCHEMA_LEVEL = 2
 
-CI_OPERATOR_LOGS_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.ci_operator_logs'
+ci_operator_logs_table_id = 'openshift-gce-devel.ci_analysis_us.ci_operator_logs'
 CI_OPERATOR_LOGS_SCHEMA_LEVEL = 11
 
-JUNIT_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.junit'
+junit_table_id = 'openshift-gce-devel.ci_analysis_us.junit'
 JUNIT_TABLE_SCHEMA_LEVEL = 14
 
-JUNIT_PR_TABLE_ID = 'openshift-gce-devel.ci_analysis_us.junit_pr'
+junit_pr_table_id = 'openshift-gce-devel.ci_analysis_us.junit_pr'
 
 # Using globals is ugly, but when running in cold load mode, these will be set for each separate process.
 # https://stackoverflow.com/questions/10117073/how-to-use-initializer-to-set-up-my-multiprocess-pool
@@ -45,12 +45,33 @@ except:
     print('Unable to use ElementTree')
 
 
-def process_connection_setup():
+def process_connection_setup(bucket_project: Optional[str] = None, bucket: str = 'origin-ci-test'):
     global global_storage_client
     global global_origin_ci_test_bucket_client
     global global_bq_client
-    global_storage_client = storage.Client(project='openshift-gce-devel')
-    global_origin_ci_test_bucket_client = global_storage_client.bucket('origin-ci-test')
+
+    global jobs_table_id
+    global releaseinfo_table
+    global ci_operator_logs_table_id
+    global junit_table_id
+    global junit_pr_table_id
+
+    if not bucket_project:
+        # If it was not specified, try to autodetect google cloud project based on bucket name.
+        if bucket == 'origin-ci-test':
+            bucket_project = 'openshift-gce-devel'
+        elif bucket == 'qe-private-deck':
+            bucket_project = 'openshift-ci-private'
+
+    if bucket == 'qe-private-deck':
+        jobs_table_id = 'openshift-gce-devel.ci_analysis_us.qe_jobs'
+        releaseinfo_table = 'openshift-gce-devel.ci_analysis_us.qe_job_releases'
+        ci_operator_logs_table_id = 'openshift-gce-devel.ci_analysis_us.qe_ci_operator_logs'
+        junit_table_id = 'openshift-gce-devel.ci_analysis_us.qe_junit'
+        junit_pr_table_id = 'openshift-gce-devel.ci_analysis_us.qe_junit_pr'
+
+    global_storage_client = storage.Client(project=bucket_project)
+    global_origin_ci_test_bucket_client = global_storage_client.bucket(bucket)
     global_bq_client = bigquery.Client()
 
 
@@ -200,6 +221,10 @@ sub_expressions = [
     r"(Step (?P<step_name_outcome>[^\s]+) (?P<step_outcome>[^\s]+) after [^\"]+)",
     # Extract build farm and ci-op namespace
     r"(Using namespace .*\.(?P<prowjob_cluster>build\d+)\..*(?P<prowjob_cluster_namespace>ci-op.*))",
+    # Extract ci-operator version
+    r"(ci-operator version (?P<ci_operator_version>v[^\"]+))",
+    # Extract openshift/release commit
+    r"(ci-operator version (?P<ci_operator_version>v[^\"]+))",
 ]
 
 combined_pattern = r"{\"level\":\"\w+\",\"msg\":\"(?:" + \
@@ -809,7 +834,7 @@ def process_junit_file_from_gcs(prowjob_name: str, prowjob_build_id: str, file_p
     if not junit_records:
         return
     bq = bigquery.Client()
-    errors = bq.insert_rows_json(JUNIT_TABLE_ID, junit_records)
+    errors = bq.insert_rows_json(junit_table_id, junit_records)
     if errors == []:
         print(f"New rows have been added: {len(junit_records)}.")
     else:
@@ -826,7 +851,7 @@ def process_pr_junit_file_from_gcs(prowjob_name: str, prowjob_build_id: str, fil
     remaining_records = junit_records
     while remaining_records:
         chunk, remaining_records = remaining_records[:chunk_size], remaining_records[chunk_size:]
-        errors.extend(bq.insert_rows_json(JUNIT_PR_TABLE_ID, chunk))
+        errors.extend(bq.insert_rows_json(junit_pr_table_id, chunk))
     if errors == []:
         print(f"New rows have been added: {len(junit_records)}.")
     else:
@@ -838,7 +863,7 @@ def process_ci_operator_log_from_gcs(build_id: str, file_path: str):
     if not ci_operator_log_records:
         return
     bq = bigquery.Client()
-    errors = bq.insert_rows_json(CI_OPERATOR_LOGS_TABLE_ID, ci_operator_log_records)
+    errors = bq.insert_rows_json(ci_operator_logs_table_id, ci_operator_log_records)
     if errors == []:
         print("New rows have been added.")
     else:
@@ -864,7 +889,7 @@ def parse_junit_from_gcs_file_path(file_path: str) -> List[Dict]:
             # each thread, if it has a significant number of records, will make its own bigquery insert.
 
             if junit_records and len(junit_records) > 50:  # Pass small count updates back to the main thread to be grouped
-                errors = global_bq_client.insert_rows_json(JUNIT_TABLE_ID, junit_records)
+                errors = global_bq_client.insert_rows_json(junit_table_id, junit_records)
                 if errors != []:
                     print(f'ERROR: thread could not insert records: {errors}')
                 junit_records.clear()
@@ -889,7 +914,7 @@ def parse_junit_pr_from_gcs_file_path(file_path: str) -> List[Dict]:
             # each thread, if it has a significant number of records, will make its own bigquery insert.
 
             if junit_records and len(junit_records) > 50 and len(junit_records) < 1000:  # Pass small count updates back to the main thread to be grouped
-                errors = global_bq_client.insert_rows_json(JUNIT_PR_TABLE_ID, junit_records)
+                errors = global_bq_client.insert_rows_json(junit_pr_table_id, junit_records)
                 if errors != []:
                     print(f'ERROR: thread could not insert records: {errors}')
                 junit_records.clear()
@@ -918,7 +943,7 @@ def process_releaseinfo_from_gcs_file_path(file_path: str):
     if not record_dicts:
         return
     bq = bigquery.Client()
-    errors = bq.insert_rows_json(RELEASEINFO_TABLE_ID, record_dicts)
+    errors = bq.insert_rows_json(releaseinfo_table, record_dicts)
     if errors == []:
         print("New rows have been added.")
     else:
@@ -930,7 +955,7 @@ def process_prowjob_from_gcs(file_path: str):
     if not record_dict:
         return
     bq = bigquery.Client()
-    errors = bq.insert_rows_json(JOBS_TABLE_ID, [record_dict])
+    errors = bq.insert_rows_json(jobs_table_id, [record_dict])
     if errors == []:
         print("New rows have been added.")
     else:
@@ -942,7 +967,7 @@ def process_releaseinfo_from_gcs(build_id: str, file_path: str):
     if not releaseinfo_records:
         return
     bq = bigquery.Client()
-    errors = bq.insert_rows_json(CI_OPERATOR_LOGS_TABLE_ID, releaseinfo_records)
+    errors = bq.insert_rows_json(ci_operator_logs_table_id, releaseinfo_records)
     if errors == []:
         print("New releaseinfo rows have been added.")
     else:
@@ -956,8 +981,9 @@ def gcs_finalize(event, context):
          context (google.cloud.functions.Context): Metadata for the event.
     """
     file = event
+    bucket: str = file["bucket"]
     gcs_file_name: str = file['name']
-    process_connection_setup()
+    process_connection_setup(bucket=bucket)
 
     if gcs_file_name.endswith("/prowjob.json"):
         process_prowjob_from_gcs(gcs_file_name)
@@ -1005,7 +1031,7 @@ def cold_load_all_prowjobs():
         if not inserts:  # No items to insert?
             return 0
         count = len(inserts)
-        errors = bq.insert_rows_json(JOBS_TABLE_ID, inserts)
+        errors = bq.insert_rows_json(jobs_table_id, inserts)
         if errors == []:
             print(f"New rows have been added: {count}")
         else:
@@ -1050,7 +1076,7 @@ def cold_load_all_ci_operator_logs():
             return 0
         count = len(inserts)
         try:
-            errors = bq.insert_rows_json(CI_OPERATOR_LOGS_TABLE_ID, inserts)
+            errors = bq.insert_rows_json(ci_operator_logs_table_id, inserts)
             if errors == []:
                 print("New rows have been added.")
             else:
@@ -1100,7 +1126,7 @@ def cold_load_junit():
         junit_xml_paths = bq.query(query_all_storage_junit_paths)
 
         query_all_processed_junit_paths = f"""
-        SELECT DISTINCT file_path FROM `{JUNIT_TABLE_ID}` WHERE SCHEMA_LEVEL = {JUNIT_TABLE_SCHEMA_LEVEL}
+        SELECT DISTINCT file_path FROM `{junit_table_id}` WHERE SCHEMA_LEVEL = {JUNIT_TABLE_SCHEMA_LEVEL}
         """
         junit_processed_xml_paths = bq.query(query_all_processed_junit_paths)
 
@@ -1125,7 +1151,7 @@ def cold_load_junit():
             return 0
         count = len(inserts)
         try:
-            errors = bq.insert_rows_json(JUNIT_TABLE_ID, inserts)
+            errors = bq.insert_rows_json(junit_table_id, inserts)
             if errors == []:
                 print(f"New rows have been added: {count}")
             else:
@@ -1184,7 +1210,7 @@ def cold_load_junit_pr():
         junit_xml_paths = bq.query(query_all_storage_junit_paths)
 
         query_all_processed_junit_paths = f"""
-        SELECT DISTINCT file_path FROM `{JUNIT_PR_TABLE_ID}` WHERE SCHEMA_LEVEL = {JUNIT_TABLE_SCHEMA_LEVEL}
+        SELECT DISTINCT file_path FROM `{junit_pr_table_id}` WHERE SCHEMA_LEVEL = {JUNIT_TABLE_SCHEMA_LEVEL}
         """
         junit_processed_xml_paths = bq.query(query_all_processed_junit_paths)
 
@@ -1211,7 +1237,7 @@ def cold_load_junit_pr():
         inserts = inserts[1000:]
         count = len(subset)
         try:
-            errors = bq.insert_rows_json(JUNIT_PR_TABLE_ID, subset)
+            errors = bq.insert_rows_json(junit_pr_table_id, subset)
             if errors == []:
                 print(f"New rows have been added: {count}")
             else:
