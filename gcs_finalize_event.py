@@ -235,7 +235,12 @@ log_entry_pattern = re.compile(combined_pattern)
 # Group 2 extracts prowjob name
 # Group 3 extracts the prowjob numeric id  (requires id be at least 12 digits to avoid finding PR number)
 # Group 4 allows you to match different junit filenames you are interested in including
-junit_path_pattern = re.compile(r"^(.*?\/([^\/]+)\/(\d{12,}))\/.*\/?(junit|e2e-monitor-tests)[^\/]+xml$")
+# Example qe paths:
+# cucushift: logs/periodic-ci-openshift-openshift-tests-private-release-4.15-amd64-nightly-aws-ipi-ovn-ipsec-f14/1710439317068845056/artifacts/aws-ipi-ovn-ipsec-f14/cucushift-e2e/artifacts/serial/junit-report/TEST-features-logging-logging_acceptance.xml
+# cypress junit: logs/periodic-ci-openshift-openshift-tests-private-release-4.15-amd64-nightly-aws-ipi-ovn-ipsec-f14/1710439317068845056/artifacts/aws-ipi-ovn-ipsec-f14/openshift-extended-web-tests/artifacts/gui_test_screenshots/junit_cypress-f7b54dc2e29e315821abf0acc44c7917.xml
+# ginkgo: https://gcsweb-qe-private-deck-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/qe-private-deck/logs/periodic-ci-openshift-openshift-tests-private-release-4.15-amd64-nightly-aws-ipi-ovn-ipsec-f14/1710439317068845056/artifacts/aws-ipi-ovn-ipsec-f14/openshift-extended-test/artifacts/junit/import-Cluster_Observability.xml
+#
+junit_path_pattern = re.compile(r"^(.*?\/([^\/]+)\/(\d{12,}))\/.*\/?(junit|e2e-monitor-tests|junit\/|junit-report\/TEST|junit_cypress)[^\/]+xml$")
 test_id_pattern = re.compile(r"^.*{([a-f0-9]+)}.*$")
 
 # Group 1 extracts path up to prowjob id (e.g. 	branch-ci-openshift-jenkins-release-4.10-images/1604867803796475904 ).
