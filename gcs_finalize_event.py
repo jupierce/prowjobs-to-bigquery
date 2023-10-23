@@ -503,7 +503,7 @@ def get_upgrade_variants() -> List[VariantMatcher]:
     if UPGRADE_VARIANTS:
         return UPGRADE_VARIANTS
     UPGRADE_VARIANTS = [
-        VariantMatcher('upgrade-multi', '-upgrade.*-to-.*-to-')
+        VariantMatcher('upgrade-multi', '-upgrade.*-to-.*-to-'),
         VariantMatcher('upgrade-minor', '-upgrade.*-minor|-upgrade-from'),
         VariantMatcher('upgrade-micro', '-upgrade'),
     ]
