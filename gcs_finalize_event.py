@@ -3,6 +3,8 @@
 import datetime
 import pathlib
 import json
+import os
+import multiprocessing
 import re
 import hashlib
 import traceback
@@ -1012,3 +1014,52 @@ def gcs_finalize(event, context):
         process_releaseinfo_from_gcs_file_path(gcs_file_name)
 
 
+def qe_process_queue(input_queue):
+    qe_bucket = 'qe-private-deck'
+    process_connection_setup(bucket=qe_bucket)
+
+    for event in iter(input_queue.get, 'STOP'):
+        gcs_finalize(event, None)
+
+
+def cold_load_qe():
+    qe_bucket = 'qe-private-deck'
+    process_connection_setup(bucket=qe_bucket)
+
+    queue = multiprocessing.Queue(os.cpu_count() * 300)
+    worker_pool = [multiprocessing.Process(target=qe_process_queue, args=(queue,)) for _ in range(max(os.cpu_count() - 2, 1))]
+    for worker in worker_pool:
+        worker.start()
+
+    object_count = 0
+    for blob in global_storage_client.list_blobs(qe_bucket):
+        event = {
+            'bucket': qe_bucket,
+            'name': blob.name
+        }
+        queue.put(event)
+        object_count += 1
+        if object_count % 10000 == 0:
+            print(object_count)
+
+    for worker in worker_pool:
+        queue.put('STOP')
+
+    for worker in worker_pool:
+        worker.join()
+
+
+if __name__ == '__main__':
+    # outcome = parse_ci_operator_graph_resources_json('abcdefg', pathlib.Path("ci-operator-graphs/ci-operator-step-graph-1.json").read_text())
+    # import yaml
+    # print(yaml.dump(outcome))
+    # parse_prowjob_json(pathlib.Path("prowjobs/payload-pr.json").read_text())
+
+    #process_connection_setup()
+    #parse_junit_from_gcs_file_path('logs/periodic-ci-openshift-release-master-ci-4.14-e2e-gcp-sdn/1640905778267164672/artifacts/e2e-gcp-sdn/openshift-e2e-test/artifacts/junit/junit_e2e__20230329-031207.xml')
+
+    #cold_load_all_ci_operator_logs()
+
+    #process_releaseinfo_from_gcs_file_path('pr-logs/pull/openshift_release/40864/rehearse-40864-pull-ci-openshift-cluster-api-release-4.11-e2e-aws/1675182964247367680/artifacts/e2e-aws/gather-extra/artifacts/releaseinfo.json')
+    #cold_load_junit()
+    cold_load_qe()
