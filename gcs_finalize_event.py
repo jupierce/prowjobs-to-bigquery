@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
+
 import datetime
 import pathlib
 import json
-import multiprocessing
 import re
 import hashlib
 import traceback
@@ -836,7 +836,7 @@ def process_junit_file_from_gcs(prowjob_name: str, prowjob_build_id: str, file_p
     junit_records = parse_junit_from_gcs(prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id, file_path=file_path)
     if not junit_records:
         return
-    bq = bigquery.Client()
+    bq = global_bq_client
     errors = bq.insert_rows_json(junit_table_id, junit_records)
     if errors == []:
         print(f"New rows have been added: {len(junit_records)}.")
@@ -848,7 +848,7 @@ def process_pr_junit_file_from_gcs(prowjob_name: str, prowjob_build_id: str, fil
     junit_records = parse_junit_from_gcs(prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id, file_path=file_path)
     if not junit_records:
         return
-    bq = bigquery.Client()
+    bq = global_bq_client
     errors = []
     chunk_size = 1000  # bigquery will return 413 if incoming request is too large (10MB). Chunk the results if they are long
     remaining_records = junit_records
@@ -865,7 +865,7 @@ def process_ci_operator_log_from_gcs(build_id: str, file_path: str):
     ci_operator_log_records = parse_ci_operator_log_resources_from_gcs(build_id, file_path)
     if not ci_operator_log_records:
         return
-    bq = bigquery.Client()
+    bq = global_bq_client
     errors = bq.insert_rows_json(ci_operator_logs_table_id, ci_operator_log_records)
     if errors == []:
         print("New rows have been added.")
@@ -945,7 +945,7 @@ def process_releaseinfo_from_gcs_file_path(file_path: str):
     record_dicts = parse_releaseinfo_from_gcs_file_path(file_path)
     if not record_dicts:
         return
-    bq = bigquery.Client()
+    bq = global_bq_client
     errors = bq.insert_rows_json(releaseinfo_table, record_dicts)
     if errors == []:
         print("New rows have been added.")
@@ -957,7 +957,7 @@ def process_prowjob_from_gcs(file_path: str):
     record_dict = parse_prowjob_from_gcs(file_path)
     if not record_dict:
         return
-    bq = bigquery.Client()
+    bq = global_bq_client
     errors = bq.insert_rows_json(jobs_table_id, [record_dict])
     if errors == []:
         print("New rows have been added.")
@@ -969,7 +969,7 @@ def process_releaseinfo_from_gcs(build_id: str, file_path: str):
     releaseinfo_records = parse_releaseinfo_from_gcs(build_id, file_path)
     if not releaseinfo_records:
         return
-    bq = bigquery.Client()
+    bq = global_bq_client
     errors = bq.insert_rows_json(ci_operator_logs_table_id, releaseinfo_records)
     if errors == []:
         print("New releaseinfo rows have been added.")
@@ -1012,292 +1012,3 @@ def gcs_finalize(event, context):
         process_releaseinfo_from_gcs_file_path(gcs_file_name)
 
 
-# Pool cannot serialize a row for the other processes, so just extract the filename
-def cs_object_generator(row_generator):
-    for r in row_generator:
-        yield r['cs_object']
-
-
-def cold_load_all_prowjobs():
-    origin_ci_test_usage_table_id = 'openshift-gce-devel.ci_analysis_us.origin-ci-test_usage_analysis'
-    query_all_prowjob_jsons = f"""
-    SELECT DISTINCT cs_object FROM `{origin_ci_test_usage_table_id}`
-    WHERE time_micros > 1630468800000 AND cs_object LIKE "%/prowjob.json"
-    """
-    bq = bigquery.Client()
-    prowjob_paths = bq.query(query_all_prowjob_jsons)
-
-    inserts = []
-    total_inserts = 0
-
-    def send_inserts():
-        if not inserts:  # No items to insert?
-            return 0
-        count = len(inserts)
-        errors = bq.insert_rows_json(jobs_table_id, inserts)
-        if errors == []:
-            print(f"New rows have been added: {count}")
-        else:
-            raise IOError("Encountered errors while inserting rows: {}".format(errors))
-        inserts.clear()
-        return count
-
-    all_paths = [lp['cs_object'] for lp in prowjob_paths]
-    total_file_count = len(all_paths)
-    print(f'{total_file_count} files need to be processed')
-
-    # Have multiple processes per processor since read from GCS will take a few I/O beats
-    pool = multiprocessing.Pool(multiprocessing.cpu_count()*12, process_connection_setup)
-    vals = pool.imap_unordered(parse_prowjob_from_gcs, all_paths, chunksize=1000)
-    for val in vals:
-        if not val:
-            continue
-        inserts.append(val)
-        if len(inserts) > 1000:
-            total_inserts += send_inserts()
-            print(f'Rows inserted so far: {total_inserts}')
-
-    total_inserts += send_inserts()
-    print(f'Total number of rows inserted: {total_inserts}')
-
-
-def cold_load_all_ci_operator_logs():
-    origin_ci_test_usage_table_id = 'openshift-gce-devel.ci_analysis_us.origin-ci-test_usage_analysis'
-    query_all_ci_operator_paths = f"""
-    SELECT DISTINCT cs_object FROM `{origin_ci_test_usage_table_id}`
-    WHERE time_micros > 1664582400000 AND cs_object LIKE "%/ci-operator.log"
-    """
-    bq = bigquery.Client()
-    ci_operator_log_paths = bq.query(query_all_ci_operator_paths)
-
-    inserts = []
-    total_inserts = 0
-    total_files = 0
-
-    def send_inserts():
-        if not inserts:  # No items to insert?
-            return 0
-        count = len(inserts)
-        try:
-            errors = bq.insert_rows_json(ci_operator_logs_table_id, inserts)
-            if errors == []:
-                print("New rows have been added.")
-            else:
-                raise IOError("Encountered errors while inserting rows: {}".format(errors))
-        except Exception as e:
-            print(f'Error inserting rows: {e}')
-        inserts.clear()
-        return count
-
-    all_paths = [lp['cs_object'] for lp in ci_operator_log_paths]
-    total_file_count = len(all_paths)
-    print(f'{total_file_count} files need to be processed')
-
-    # Have multiple processes per processor since read from GCS will take a few I/O beats
-    pool = multiprocessing.Pool(multiprocessing.cpu_count()*3, process_connection_setup)
-    vals = pool.imap_unordered(parse_ci_operator_log_from_gcs_file_path, all_paths, chunksize=1000)
-    for val in vals:
-        if not val:
-            continue
-        inserts.extend(val)
-        if len(inserts) > 1000:
-            total_inserts += send_inserts()
-            print(f'Rows inserted so far: {total_inserts} ({total_files} of {total_file_count})')
-
-    total_inserts += send_inserts()
-    print(f'Total number of rows inserted: {total_inserts}')
-
-
-def cold_load_junit():
-    bq = bigquery.Client()
-
-    remaining_paths = set()
-    cache_file = pathlib.Path('cache')
-    if cache_file.is_file():
-        with cache_file.open('r', encoding='utf-8') as c:
-            while True:
-                line = c.readline()
-                if not line:
-                    break
-                remaining_paths.add(line.strip())
-    else:
-        origin_ci_test_usage_table_id = 'openshift-gce-devel.ci_analysis_us.origin-ci-test_usage_analysis'
-        query_all_storage_junit_paths = f"""
-        SELECT DISTINCT cs_object FROM `{origin_ci_test_usage_table_id}`
-        WHERE time_micros > 1664582400000 AND cs_object LIKE "%/junit%.xml" AND cs_method IN ("PUT", "POST") AND cs_object NOT LIKE "%/pull/%"
-        """
-        junit_xml_paths = bq.query(query_all_storage_junit_paths)
-
-        query_all_processed_junit_paths = f"""
-        SELECT DISTINCT file_path FROM `{junit_table_id}` WHERE SCHEMA_LEVEL = {JUNIT_TABLE_SCHEMA_LEVEL}
-        """
-        junit_processed_xml_paths = bq.query(query_all_processed_junit_paths)
-
-        all_paths = set(lp['cs_object'] for lp in junit_xml_paths)
-        registered_paths = set(lp['file_path'] for lp in junit_processed_xml_paths)
-
-        print(f'All found paths: {len(all_paths)}')
-        print(f'Already registered paths: {len(registered_paths)}')
-        already_done = all_paths.intersection(registered_paths)
-        print(f'Already registered: {len(already_done)}')
-        already_done = None
-        remaining_paths = set(all_paths.difference(registered_paths))
-        with cache_file.open('w+', encoding='utf-8') as c:
-            for p in remaining_paths:
-                c.write(f'{p}\n')
-
-    inserts = []
-    total_inserts = 0
-
-    def send_inserts():
-        if not inserts:  # No items to insert?
-            return 0
-        count = len(inserts)
-        try:
-            errors = bq.insert_rows_json(junit_table_id, inserts)
-            if errors == []:
-                print(f"New rows have been added: {count}")
-            else:
-                raise IOError("Encountered errors while inserting rows: {}".format(errors))
-        except Exception as e:
-            print(f'Error inserting rows: {e}')
-        inserts.clear()
-        return count
-
-    print(f'All remaining: {len(remaining_paths)}')
-
-    total_file_count = len(remaining_paths)
-    print(f'{total_file_count} files need to be processed')
-
-    while len(remaining_paths) > 0:
-        p_count = multiprocessing.cpu_count()
-        pool = multiprocessing.Pool(p_count, process_connection_setup)
-        portion_to_process = list(remaining_paths)[:5000]
-        vals = pool.imap_unordered(parse_junit_from_gcs_file_path, portion_to_process, chunksize=5)
-        for val in vals:
-            if not val:
-                continue
-
-            inserts.extend(val)
-            if len(inserts) > 1000:
-                total_inserts += send_inserts()
-
-        total_inserts += send_inserts()
-        remaining_paths.difference_update(portion_to_process)
-        print(f'Files remaining: {len(remaining_paths)}')
-        print(f'Total number of rows inserted: {total_inserts}')
-        print('CLOSING POOL')
-        pool.close()
-        pool.join()
-
-
-def cold_load_junit_pr():
-    bq = bigquery.Client()
-
-    remaining_paths = set()
-    cache_file = pathlib.Path('cache')
-    if cache_file.is_file():
-        with cache_file.open('r', encoding='utf-8') as c:
-            while True:
-                line = c.readline()
-                if not line:
-                    break
-                remaining_paths.add(line.strip())
-    else:
-        origin_ci_test_usage_table_id = 'openshift-gce-devel.ci_analysis_us.origin-ci-test_usage_analysis'
-        query_all_storage_junit_paths = f"""
-        SELECT DISTINCT cs_object FROM `{origin_ci_test_usage_table_id}`
-        WHERE time_micros > 1680901873000000 AND cs_object LIKE "%/junit%.xml" AND cs_method IN ("PUT", "POST") AND cs_object LIKE "%/pull/%"
-        """
-
-        junit_xml_paths = bq.query(query_all_storage_junit_paths)
-
-        query_all_processed_junit_paths = f"""
-        SELECT DISTINCT file_path FROM `{junit_pr_table_id}` WHERE SCHEMA_LEVEL = {JUNIT_TABLE_SCHEMA_LEVEL}
-        """
-        junit_processed_xml_paths = bq.query(query_all_processed_junit_paths)
-
-        all_paths = set(lp['cs_object'] for lp in junit_xml_paths)
-        registered_paths = set(lp['file_path'] for lp in junit_processed_xml_paths)
-
-        print(f'All found paths: {len(all_paths)}')
-        print(f'Already registered paths: {len(registered_paths)}')
-        already_done = all_paths.intersection(registered_paths)
-        print(f'Already registered: {len(already_done)}')
-        remaining_paths = set(all_paths.difference(registered_paths))
-        with cache_file.open('w+', encoding='utf-8') as c:
-            for p in remaining_paths:
-                c.write(f'{p}\n')
-
-    inserts = []
-    total_inserts = 0
-
-    def send_inserts():
-        nonlocal inserts
-        if not inserts:  # No items to insert?
-            return 0
-        subset = inserts[:1000]  # Prevent update too large errors
-        inserts = inserts[1000:]
-        count = len(subset)
-        try:
-            errors = bq.insert_rows_json(junit_pr_table_id, subset)
-            if errors == []:
-                print(f"New rows have been added: {count}")
-            else:
-                raise IOError("Encountered errors while inserting rows: {}".format(errors))
-        except Exception as e:
-            print(f'Error inserting rows: {e}')
-        return count
-
-    print(f'All remaining: {len(remaining_paths)}')
-
-    total_file_count = len(remaining_paths)
-    print(f'{total_file_count} files need to be processed')
-
-    while len(remaining_paths) > 0:
-        p_count = multiprocessing.cpu_count()
-        pool = multiprocessing.Pool(p_count, process_connection_setup)
-        portion_to_process = list(remaining_paths)[:5000]
-        vals = pool.imap_unordered(parse_junit_pr_from_gcs_file_path, portion_to_process, chunksize=5)
-        for val in vals:
-            if not val:
-                continue
-
-            inserts.extend(val)
-            while len(inserts) > 1000:
-                total_inserts += send_inserts()
-
-        total_inserts += send_inserts()
-        remaining_paths.difference_update(portion_to_process)
-        print(f'Files remaining: {len(remaining_paths)}')
-        print(f'Total number of rows inserted: {total_inserts}')
-        print('CLOSING POOL')
-        pool.close()
-        pool.join()
-
-
-def cold_load_qe():
-    qe_bucket = 'qe-private-deck'
-    process_connection_setup(bucket=qe_bucket)
-    for blob in global_storage_client.list_blobs(qe_bucket):
-        event = {
-            'bucket': qe_bucket,
-            'name': blob.name
-        }
-        gcs_finalize(event, None)
-
-
-if __name__ == '__main__':
-    # outcome = parse_ci_operator_graph_resources_json('abcdefg', pathlib.Path("ci-operator-graphs/ci-operator-step-graph-1.json").read_text())
-    # import yaml
-    # print(yaml.dump(outcome))
-    # parse_prowjob_json(pathlib.Path("prowjobs/payload-pr.json").read_text())
-
-    #process_connection_setup()
-    #parse_junit_from_gcs_file_path('logs/periodic-ci-openshift-release-master-ci-4.14-e2e-gcp-sdn/1640905778267164672/artifacts/e2e-gcp-sdn/openshift-e2e-test/artifacts/junit/junit_e2e__20230329-031207.xml')
-
-    #cold_load_all_ci_operator_logs()
-
-    #process_releaseinfo_from_gcs_file_path('pr-logs/pull/openshift_release/40864/rehearse-40864-pull-ci-openshift-cluster-api-release-4.11-e2e-aws/1675182964247367680/artifacts/e2e-aws/gather-extra/artifacts/releaseinfo.json')
-    #cold_load_junit()
-    cold_load_qe()
