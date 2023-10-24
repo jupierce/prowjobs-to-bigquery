@@ -20,7 +20,7 @@ from google.cloud import bigquery, storage
 # Destination for parsed prowjob info
 jobs_table_id = 'openshift-gce-devel.ci_analysis_us.jobs'
 
-releaseinfo_table = 'openshift-gce-devel.ci_analysis_us.job_releases'
+releaseinfo_table_id = 'openshift-gce-devel.ci_analysis_us.job_releases'
 RELEASEINFO_SCHEMA_LEVEL = 2
 
 ci_operator_logs_table_id = 'openshift-gce-devel.ci_analysis_us.ci_operator_logs'
@@ -31,10 +31,13 @@ JUNIT_TABLE_SCHEMA_LEVEL = 14
 
 junit_pr_table_id = 'openshift-gce-devel.ci_analysis_us.junit_pr'
 
+job_intervals_table_id = 'openshift-gce-devel.ci_analysis_us.job_intervals'
+
+
 # Using globals is ugly, but when running in cold load mode, these will be set for each separate process.
 # https://stackoverflow.com/questions/10117073/how-to-use-initializer-to-set-up-my-multiprocess-pool
 global_storage_client = None
-global_origin_ci_test_bucket_client = None
+global_result_storage_bucket_client = None
 
 global_bq_client = None
 
@@ -49,14 +52,15 @@ except:
 
 def process_connection_setup(bucket_project: Optional[str] = None, bucket: str = 'origin-ci-test'):
     global global_storage_client
-    global global_origin_ci_test_bucket_client
+    global global_result_storage_bucket_client
     global global_bq_client
 
     global jobs_table_id
-    global releaseinfo_table
+    global releaseinfo_table_id
     global ci_operator_logs_table_id
     global junit_table_id
     global junit_pr_table_id
+    global job_intervals_table_id
 
     if not global_storage_client:
 
@@ -69,13 +73,14 @@ def process_connection_setup(bucket_project: Optional[str] = None, bucket: str =
 
         if bucket == 'qe-private-deck':
             jobs_table_id = 'openshift-gce-devel.ci_analysis_us.qe_jobs'
-            releaseinfo_table = 'openshift-gce-devel.ci_analysis_us.qe_job_releases'
+            releaseinfo_table_id = 'openshift-gce-devel.ci_analysis_us.qe_job_releases'
             ci_operator_logs_table_id = 'openshift-gce-devel.ci_analysis_us.qe_ci_operator_logs'
             junit_table_id = 'openshift-gce-devel.ci_analysis_us.qe_junit'
             junit_pr_table_id = 'openshift-gce-devel.ci_analysis_us.qe_junit_pr'
+            job_intervals_table_id = 'openshift-gce-devel.ci_analysis_us.qe_job_intervals'
 
         global_storage_client = storage.Client(project=bucket_project)
-        global_origin_ci_test_bucket_client = global_storage_client.bucket(bucket)
+        global_result_storage_bucket_client = global_storage_client.bucket(bucket)
         global_bq_client = bigquery.Client()
 
 
@@ -128,6 +133,17 @@ class JobReleaseRecord(NamedTuple):
     schema_level: int
 
 
+class JobIntervalsRecord(NamedTuple):
+    prowjob_name: str
+    prowjob_build_id: str
+    level: str
+    source: str
+    from_time: str
+    to_time: str
+    locator: str
+    message: str
+
+
 def or_none(v):
     if v is Missing:
         return None
@@ -135,7 +151,7 @@ def or_none(v):
 
 
 def to_ts(s):
-    if s is Missing:
+    if s is Missing or s is None:
         return None
     return s.rstrip('Z').split('.')[0]  # '.' split removes 2022-12-19T19:18:44.558622693 subseconds
 
@@ -248,17 +264,42 @@ test_id_pattern = re.compile(r"^.*{([a-f0-9]+)}.*$")
 # Group 1 extracts path up to prowjob id (e.g. 	branch-ci-openshift-jenkins-release-4.10-images/1604867803796475904 ).
 # Group 2 extracts prowjob name
 # Group 3 extracts the prowjob numeric id (requires id be at least 12 digits to avoid finding PR number)
-releaseinfo_path_pattern = re.compile(r"^(.*?\/([^\/]+)\/(\d{12,}))\/.*\/?releaseinfo\.json$")
+prowjob_path_pattern = re.compile(r"^(.*?\/([^\/]+)\/(\d{12,}))\/.*$")
 
 # extracts the first ocp version like '4.11' (in group 1) or 'master' or 'main' (in group 2)
 branch_pattern = re.compile(r".*?\D+[-\/](\d\.\d+)\D?.*|.*\-(master|main)\-.*")
+
+
+def parse_job_intervals_json(prowjob_name: str, prowjob_build_id: str, job_intervals_json_text: str, is_pr: bool) -> Optional[List[Dict]]:
+    try:
+        job_intervals_items = json.loads(job_intervals_json_text)['items']
+    except:
+        print(f'Found invalid intervals file: {prowjob_build_id}')
+        return None
+
+    records: List[Dict] = list()
+    for item in job_intervals_items:
+        jr = JobIntervalsRecord(
+            prowjob_name=prowjob_name,
+            prowjob_build_id=prowjob_build_id,
+            level=item.get('level', None),
+            source=item.get('source', None),
+            from_time=to_ts(item['from']),
+            to_time=to_ts(item['to']),
+            message=item.get('message', None),
+            locator=item.get('locator', None),
+        )
+        record = dict(jr._asdict())
+        records.append(record)
+
+    return records
 
 
 def parse_releaseinfo_json(prowjob_name: str, prowjob_build_id: str, releaseinfo_json_text: str, is_pr: bool) -> Optional[List[Dict]]:
     try:
         releaseinfo_dict = json.loads(releaseinfo_json_text)
     except:
-        print(f'Found invalid releaseinfo.json')
+        print(f'Found invalid releaseinfo.json: {prowjob_build_id}')
         return None
 
     releaseinfo = Model(releaseinfo_dict)
@@ -779,7 +820,7 @@ def parse_prowjob_json(prowjob_json_text):
 
 def parse_ci_operator_log_resources_from_gcs(build_id: str, file_path: str) -> Optional[List[Dict]]:
     try:
-        b = global_origin_ci_test_bucket_client.get_blob(file_path)
+        b = global_result_storage_bucket_client.get_blob(file_path)
         if not b:
             return None
 
@@ -791,7 +832,7 @@ def parse_ci_operator_log_resources_from_gcs(build_id: str, file_path: str) -> O
 
 
 def parse_prowjob_from_gcs(file_path: str):
-    b = global_origin_ci_test_bucket_client.get_blob(file_path)
+    b = global_result_storage_bucket_client.get_blob(file_path)
     if not b:
         return None
 
@@ -802,8 +843,17 @@ def parse_prowjob_from_gcs(file_path: str):
 junk_bytes_pattern = re.compile(r'[^\x20-\x7E]+')
 
 
+def parse_job_intervals_from_gcs(prowjob_name: str, prowjob_build_id: str, file_path: str) -> Optional[List[Dict]]:
+    b = global_result_storage_bucket_client.get_blob(file_path)
+    if not b:
+        return None
+    is_pr = '/pull/' in file_path
+    job_intervals_json_text = b.download_as_text()
+    return parse_job_intervals_json(prowjob_name, prowjob_build_id, job_intervals_json_text, is_pr=is_pr)
+
+
 def parse_releaseinfo_from_gcs(prowjob_name: str, prowjob_build_id: str, file_path: str) -> Optional[List[Dict]]:
-    b = global_origin_ci_test_bucket_client.get_blob(file_path)
+    b = global_result_storage_bucket_client.get_blob(file_path)
     if not b:
         return None
     is_pr = '/pull/' in file_path
@@ -817,7 +867,7 @@ def parse_junit_from_gcs(prowjob_name: str, prowjob_build_id: str, file_path: st
         # This is ci-operator's junit. Not important for TRT atm.
         return None
 
-    b = global_origin_ci_test_bucket_client.get_blob(file_path)
+    b = global_result_storage_bucket_client.get_blob(file_path)
     if not b:
         return None
 
@@ -931,12 +981,25 @@ def parse_junit_pr_from_gcs_file_path(file_path: str) -> List[Dict]:
     return []
 
 
+def parse_job_intervals_from_gcs_file_path(file_path: str) -> List[Dict]:
+    try:
+        prowjob_path_matcher = prowjob_path_pattern.match(file_path)
+        if prowjob_path_matcher:
+            prowjob_name = prowjob_path_matcher.group(2)
+            prowjob_build_id = prowjob_path_matcher.group(3)
+            return parse_job_intervals_from_gcs(prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id, file_path=file_path)
+    except Exception as e:
+        print(f'\n\nError while processing job intervals: {file_path}')
+        traceback.print_exc()
+    return []
+
+
 def parse_releaseinfo_from_gcs_file_path(file_path: str) -> List[Dict]:
     try:
-        releaseinfo_match = releaseinfo_path_pattern.match(file_path)
-        if releaseinfo_match:
-            prowjob_name = releaseinfo_match.group(2)
-            prowjob_build_id = releaseinfo_match.group(3)
+        prowjob_path_matcher = prowjob_path_pattern.match(file_path)
+        if prowjob_path_matcher:
+            prowjob_name = prowjob_path_matcher.group(2)
+            prowjob_build_id = prowjob_path_matcher.group(3)
             return parse_releaseinfo_from_gcs(prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id, file_path=file_path)
     except Exception as e:
         print(f'\n\nError while processing releaseinfo: {file_path}')
@@ -944,12 +1007,36 @@ def parse_releaseinfo_from_gcs_file_path(file_path: str) -> List[Dict]:
     return []
 
 
+def process_job_intervals_from_gcs_file_path(file_path: str):
+    record_dicts = parse_job_intervals_from_gcs_file_path(file_path)
+    if not record_dicts:
+        return
+    bq = global_bq_client
+    errors = []
+    chunk_size = 1000  # bigquery will return 413 if incoming request is too large (10MB). Chunk the results if they are long
+    remaining_records = record_dicts
+    while remaining_records:
+        chunk, remaining_records = remaining_records[:chunk_size], remaining_records[chunk_size:]
+        errors.extend(bq.insert_rows_json(job_intervals_table_id, chunk))
+    if errors == []:
+        print(f"New rows have been added: {len(record_dicts)}.")
+    else:
+        raise IOError("Encountered errors while inserting rows: {}".format(errors))
+
+
+    errors = bq.insert_rows_json(job_intervals_table_id, record_dicts)
+    if errors == []:
+        print("New rows have been added.")
+    else:
+        raise IOError("Encountered errors while inserting rows: {}".format(errors))
+
+
 def process_releaseinfo_from_gcs_file_path(file_path: str):
     record_dicts = parse_releaseinfo_from_gcs_file_path(file_path)
     if not record_dicts:
         return
     bq = global_bq_client
-    errors = bq.insert_rows_json(releaseinfo_table, record_dicts)
+    errors = bq.insert_rows_json(releaseinfo_table_id, record_dicts)
     if errors == []:
         print("New rows have been added.")
     else:
@@ -1013,6 +1100,8 @@ def gcs_finalize(event, context):
                                             file_path=gcs_file_name)
     elif gcs_file_name.endswith('/releaseinfo.json'):
         process_releaseinfo_from_gcs_file_path(gcs_file_name)
+    elif gcs_file_name.startswith('e2e-timelines_everything_') and gcs_file_name.endswith('.json'):
+        process_job_intervals_from_gcs_file_path(gcs_file_name)
 
 
 def qe_process_queue(input_queue):
@@ -1063,4 +1152,7 @@ if __name__ == '__main__':
 
     #process_releaseinfo_from_gcs_file_path('pr-logs/pull/openshift_release/40864/rehearse-40864-pull-ci-openshift-cluster-api-release-4.11-e2e-aws/1675182964247367680/artifacts/e2e-aws/gather-extra/artifacts/releaseinfo.json')
     #cold_load_junit()
-    cold_load_qe()
+    # cold_load_qe()
+
+    process_connection_setup()
+    process_job_intervals_from_gcs_file_path('pr-logs/pull/openshift_cluster-authentication-operator/638/pull-ci-openshift-cluster-authentication-operator-release-4.13-e2e-agnostic-upgrade/1715405306432851968/artifacts/e2e-agnostic-upgrade/openshift-e2e-test/artifacts/junit/e2e-timelines_everything_20231020-173307.json')
