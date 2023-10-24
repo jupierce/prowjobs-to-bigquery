@@ -1100,7 +1100,7 @@ def gcs_finalize(event, context):
                                             file_path=gcs_file_name)
     elif gcs_file_name.endswith('/releaseinfo.json'):
         process_releaseinfo_from_gcs_file_path(gcs_file_name)
-    elif gcs_file_name.startswith('e2e-timelines_everything_') and gcs_file_name.endswith('.json'):
+    elif 'e2e-timelines_everything_' in gcs_file_name and gcs_file_name.endswith('.json'):
         process_job_intervals_from_gcs_file_path(gcs_file_name)
 
 
