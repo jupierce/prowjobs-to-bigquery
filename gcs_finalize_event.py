@@ -142,6 +142,7 @@ class JobIntervalsRecord(NamedTuple):
     to_time: str
     locator: str
     message: str
+    payload: str
 
 
 def or_none(v):
@@ -288,6 +289,7 @@ def parse_job_intervals_json(prowjob_name: str, prowjob_build_id: str, job_inter
             to_time=to_ts(item['to']),
             message=item.get('message', None),
             locator=item.get('locator', None),
+            payload=json.dumps(item),
         )
         record = dict(jr._asdict())
         records.append(record)
