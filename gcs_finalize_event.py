@@ -1015,7 +1015,7 @@ def process_job_intervals_from_gcs_file_path(file_path: str):
         return
     bq = global_bq_client
     errors = []
-    chunk_size = 1000  # bigquery will return 413 if incoming request is too large (10MB). Chunk the results if they are long
+    chunk_size = 100  # bigquery will return 413 if incoming request is too large (10MB). Chunk the results if they are long
     remaining_records = record_dicts
     while remaining_records:
         chunk, remaining_records = remaining_records[:chunk_size], remaining_records[chunk_size:]
