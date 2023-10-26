@@ -13,7 +13,7 @@ SELECT * EXCEPT(schema_level) FROM `openshift-gce-devel.ci_analysis_us.ci_operat
 # Bulk load
 - Setup native table which contains access logs for origin-ci-test table. This is what the cold load system will read to find files of interest. You used a native table since external table would fail if corrupt CSVs existed.
   - Use source of "Google Cloud Storage"
-  - Pull from files: `origin-ci-test/origin-ci-test_usage_2*`
+  - Pull from files: `origin-ci-test/origin-ci-test_usage_2023*`
   - Auto detect schema
   - Tolerate some errors
   - CSV

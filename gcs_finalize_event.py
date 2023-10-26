@@ -32,6 +32,7 @@ JUNIT_TABLE_SCHEMA_LEVEL = 14
 junit_pr_table_id = 'openshift-gce-devel.ci_analysis_us.junit_pr'
 
 job_intervals_table_id = 'openshift-gce-devel.ci_analysis_us.job_intervals'
+JOB_INTERVALS_SCHEMA_LEVEL = 2
 
 
 # Using globals is ugly, but when running in cold load mode, these will be set for each separate process.
@@ -134,6 +135,7 @@ class JobReleaseRecord(NamedTuple):
 
 
 class JobIntervalsRecord(NamedTuple):
+    schema_level: int
     prowjob_name: str
     prowjob_build_id: str
     level: str
@@ -281,6 +283,7 @@ def parse_job_intervals_json(prowjob_name: str, prowjob_build_id: str, job_inter
     records: List[Dict] = list()
     for item in job_intervals_items:
         jr = JobIntervalsRecord(
+            schema_level=JOB_INTERVALS_SCHEMA_LEVEL,
             prowjob_name=prowjob_name,
             prowjob_build_id=prowjob_build_id,
             level=item.get('level', None),
@@ -1015,20 +1018,13 @@ def process_job_intervals_from_gcs_file_path(file_path: str):
         return
     bq = global_bq_client
     errors = []
-    chunk_size = 100  # bigquery will return 413 if incoming request is too large (10MB). Chunk the results if they are long
+    chunk_size = 500  # bigquery will return 413 if incoming request is too large (10MB). Chunk the results if they are long
     remaining_records = record_dicts
     while remaining_records:
         chunk, remaining_records = remaining_records[:chunk_size], remaining_records[chunk_size:]
         errors.extend(bq.insert_rows_json(job_intervals_table_id, chunk))
     if errors == []:
         print(f"New rows have been added: {len(record_dicts)}.")
-    else:
-        raise IOError("Encountered errors while inserting rows: {}".format(errors))
-
-
-    errors = bq.insert_rows_json(job_intervals_table_id, record_dicts)
-    if errors == []:
-        print("New rows have been added.")
     else:
         raise IOError("Encountered errors while inserting rows: {}".format(errors))
 
@@ -1114,6 +1110,13 @@ def qe_process_queue(input_queue):
         gcs_finalize(event, None)
 
 
+def ci_process_queue(input_queue):
+    process_connection_setup()
+
+    for event in iter(input_queue.get, 'STOP'):
+        gcs_finalize(event, None)
+
+
 def cold_load_qe():
     qe_bucket = 'qe-private-deck'
     process_connection_setup(bucket=qe_bucket)
@@ -1128,6 +1131,42 @@ def cold_load_qe():
         event = {
             'bucket': qe_bucket,
             'name': blob.name
+        }
+        queue.put(event)
+        object_count += 1
+        if object_count % 10000 == 0:
+            print(object_count)
+
+    for worker in worker_pool:
+        queue.put('STOP')
+
+    for worker in worker_pool:
+        worker.join()
+
+
+def cold_load_intervals():
+    process_connection_setup()
+
+    origin_ci_test_usage_table_id = 'openshift-gce-devel.ci_analysis_us.origin-ci-test_usage_analysis_intervals'
+    query_relevant_storage_paths = f"""
+    SELECT DISTINCT cs_object FROM `{origin_ci_test_usage_table_id}`
+    WHERE time_micros > 1690897899000000 AND cs_object LIKE "%/e2e-timelines_everything%.json" AND cs_method IN ("PUT", "POST")
+    """
+
+    paths = global_bq_client.query(query_relevant_storage_paths)
+
+    queue = multiprocessing.Queue(os.cpu_count() * 1000)
+    worker_pool = [multiprocessing.Process(target=ci_process_queue, args=(queue,)) for _ in range(max(os.cpu_count() - 2, 1))]
+    for worker in worker_pool:
+        worker.start()
+
+    object_count = 0
+    for record in paths:
+        blob_name = record['cs_object']
+        print(f'Processing {blob_name}')
+        event = {
+            'bucket': 'origin-ci-test',
+            'name': blob_name
         }
         queue.put(event)
         object_count += 1
@@ -1156,5 +1195,6 @@ if __name__ == '__main__':
     #cold_load_junit()
     # cold_load_qe()
 
-    process_connection_setup()
-    process_job_intervals_from_gcs_file_path('pr-logs/pull/openshift_cluster-authentication-operator/638/pull-ci-openshift-cluster-authentication-operator-release-4.13-e2e-agnostic-upgrade/1715405306432851968/artifacts/e2e-agnostic-upgrade/openshift-e2e-test/artifacts/junit/e2e-timelines_everything_20231020-173307.json')
+    #process_connection_setup()
+    #process_job_intervals_from_gcs_file_path('pr-logs/pull/openshift_cluster-authentication-operator/638/pull-ci-openshift-cluster-authentication-operator-release-4.13-e2e-agnostic-upgrade/1715405306432851968/artifacts/e2e-agnostic-upgrade/openshift-e2e-test/artifacts/junit/e2e-timelines_everything_20231020-173307.json')
+    cold_load_intervals()
