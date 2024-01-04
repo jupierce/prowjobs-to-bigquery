@@ -12,27 +12,77 @@ from xml import sax
 
 from io import StringIO
 from typing import NamedTuple, List, Dict, Optional
-from model import Model, Missing, ListModel
+from model import Model, Missing
 from collections import defaultdict
 
 from google.cloud import bigquery, storage
 
-# Destination for parsed prowjob info
-jobs_table_id = 'openshift-gce-devel.ci_analysis_us.jobs'
-
-releaseinfo_table_id = 'openshift-gce-devel.ci_analysis_us.job_releases'
 RELEASEINFO_SCHEMA_LEVEL = 2
-
-ci_operator_logs_table_id = 'openshift-gce-devel.ci_analysis_us.ci_operator_logs'
 CI_OPERATOR_LOGS_SCHEMA_LEVEL = 11
-
-junit_table_id = 'openshift-gce-devel.ci_analysis_us.junit'
 JUNIT_TABLE_SCHEMA_LEVEL = 14
-
-junit_pr_table_id = 'openshift-gce-devel.ci_analysis_us.junit_pr'
-
-job_intervals_table_id = 'openshift-gce-devel.ci_analysis_us.job_intervals'
 JOB_INTERVALS_SCHEMA_LEVEL = 2
+
+
+class BucketInfo(NamedTuple):
+    """
+    Depending on which GCS bucket was written to, we will be updating different datasets (potentially in different projects).
+    """
+    # The project in which the bucket resides. This can technically be accessed through
+    # en environment variable, but that would require importing 'os' / function call which
+    # could impact execution size/time & thus cost.
+    bucket_project: str
+
+    # As data is written to a bucket, this cloud function will append data to a set of tables in a destination dataset.
+    # Writing to one bucket will trigger updates to
+    dest_bigquery_dataset: str
+
+    table_name_jobs: str
+    table_name_junit: str
+    table_name_junit_pr: str
+    table_name_job_intervals: str
+    table_name_job_releases: str
+    table_name_ci_operator_logs: str
+
+    @property
+    def table_id_jobs(self):
+        return f'{self.dest_bigquery_dataset}.{self.table_name_jobs}'
+
+    @property
+    def table_id_junit(self):
+        return f'{self.dest_bigquery_dataset}.{self.table_name_junit}'
+
+    @property
+    def table_id_junit_pr(self):
+        return f'{self.dest_bigquery_dataset}.{self.table_name_junit_pr}'
+
+    @property
+    def table_id_job_intervals(self):
+        return f'{self.dest_bigquery_dataset}.{self.table_name_job_intervals}'
+
+    @property
+    def table_id_job_releases(self):
+        return f'{self.dest_bigquery_dataset}.{self.table_name_job_releases}'
+
+    @property
+    def table_id_ci_operator_logs(self):
+        return f'{self.dest_bigquery_dataset}.{self.table_name_ci_operator_logs}'
+
+
+DEFAULT_TABLE_NAMES = {
+    'table_name_jobs': 'jobs',
+    'table_name_junit': 'junit',
+    'table_name_junit_pr': 'junit_pr',
+    'table_name_job_intervals': 'job_intervals',
+    'table_name_job_releases': 'job_releases',
+    'table_name_ci_operator_logs': 'ci_operator_logs'
+}
+
+
+# The list of buckets to react to and the datasets to update when writes are made to that bucket.
+BUCKET_INFO_MAPPING = {
+    'test-platform-results': BucketInfo(bucket_project='openshift-gce-devel', dest_bigquery_dataset='openshift-gce-devel.ci_analysis_us', **DEFAULT_TABLE_NAMES),
+    'qe-private-deck': BucketInfo(bucket_project='openshift-ci-private', dest_bigquery_dataset='openshift-gce-devel.qe_testing', **DEFAULT_TABLE_NAMES),
+}
 
 
 # Using globals is ugly, but when running in cold load mode, these will be set for each separate process.
@@ -41,45 +91,30 @@ global_storage_client = None
 global_result_storage_bucket_client = None
 
 global_bq_client = None
+global_bucket_info: Optional[BucketInfo] = None
 
 
 use_ET = False
 try:
     import xml.etree.ElementTree as ET
-    use_ET =True
+    use_ET = True
 except:
     print('Unable to use ElementTree')
 
 
-def process_connection_setup(bucket_project: Optional[str] = None, bucket: str = 'origin-ci-test'):
+def process_connection_setup(bucket: str):
     global global_storage_client
+    global global_bucket_info
     global global_result_storage_bucket_client
     global global_bq_client
 
-    global jobs_table_id
-    global releaseinfo_table_id
-    global ci_operator_logs_table_id
-    global junit_table_id
-    global junit_pr_table_id
-    global job_intervals_table_id
-
     if not global_storage_client:
+        global_bucket_info = BUCKET_INFO_MAPPING.get(bucket, None)
 
-        if not bucket_project:
-            # If it was not specified, try to autodetect google cloud project based on bucket name.
-            if bucket == 'origin-ci-test':
-                bucket_project = 'openshift-gce-devel'
-            elif bucket == 'qe-private-deck':
-                bucket_project = 'openshift-ci-private'
+        if not global_bucket_info:
+            raise IOError(f'No bucket information has been configured for bucket: {bucket}')
 
-        if bucket == 'qe-private-deck':
-            jobs_table_id = 'openshift-gce-devel.ci_analysis_us.qe_jobs'
-            releaseinfo_table_id = 'openshift-gce-devel.ci_analysis_us.qe_job_releases'
-            ci_operator_logs_table_id = 'openshift-gce-devel.ci_analysis_us.qe_ci_operator_logs'
-            junit_table_id = 'openshift-gce-devel.ci_analysis_us.qe_junit'
-            junit_pr_table_id = 'openshift-gce-devel.ci_analysis_us.qe_junit_pr'
-            job_intervals_table_id = 'openshift-gce-devel.ci_analysis_us.qe_job_intervals'
-
+        bucket_project = global_bucket_info.bucket_project
         global_storage_client = storage.Client(project=bucket_project)
         global_result_storage_bucket_client = global_storage_client.bucket(bucket)
         global_bq_client = bigquery.Client()
@@ -866,7 +901,7 @@ def parse_releaseinfo_from_gcs(prowjob_name: str, prowjob_build_id: str, file_pa
     return parse_releaseinfo_json(prowjob_name, prowjob_build_id, releaseinfo_json_text, is_pr=is_pr)
 
 
-def parse_junit_from_gcs(prowjob_name: str, prowjob_build_id: str, file_path: str) -> List[Dict]:
+def parse_junit_from_gcs(prowjob_name: str, prowjob_build_id: str, file_path: str) -> Optional[List[Dict]]:
 
     if file_path.endswith('junit_operator.xml'):
         # This is ci-operator's junit. Not important for TRT atm.
@@ -877,7 +912,7 @@ def parse_junit_from_gcs(prowjob_name: str, prowjob_build_id: str, file_path: st
         return None
 
     if b.size is not None and b.size == 0:
-        # Lots of empty junit xml files it turns out..
+        # Lots of empty junit xml files it turns out.
         return None
 
     updated_dt = b.updated
@@ -895,7 +930,7 @@ def process_junit_file_from_gcs(prowjob_name: str, prowjob_build_id: str, file_p
     if not junit_records:
         return
     bq = global_bq_client
-    errors = bq.insert_rows_json(junit_table_id, junit_records)
+    errors = bq.insert_rows_json(global_bucket_info.table_id_junit, junit_records)
     if errors == []:
         print(f"New rows have been added: {len(junit_records)}.")
     else:
@@ -912,7 +947,7 @@ def process_pr_junit_file_from_gcs(prowjob_name: str, prowjob_build_id: str, fil
     remaining_records = junit_records
     while remaining_records:
         chunk, remaining_records = remaining_records[:chunk_size], remaining_records[chunk_size:]
-        errors.extend(bq.insert_rows_json(junit_pr_table_id, chunk))
+        errors.extend(bq.insert_rows_json(global_bucket_info.table_id_junit_pr, chunk))
     if errors == []:
         print(f"New rows have been added: {len(junit_records)}.")
     else:
@@ -924,7 +959,7 @@ def process_ci_operator_log_from_gcs(build_id: str, file_path: str):
     if not ci_operator_log_records:
         return
     bq = global_bq_client
-    errors = bq.insert_rows_json(ci_operator_logs_table_id, ci_operator_log_records)
+    errors = bq.insert_rows_json(global_bucket_info.table_id_ci_operator_logs, ci_operator_log_records)
     if errors == []:
         print("New rows have been added.")
     else:
@@ -950,7 +985,7 @@ def parse_junit_from_gcs_file_path(file_path: str) -> List[Dict]:
             # each thread, if it has a significant number of records, will make its own bigquery insert.
 
             if junit_records and len(junit_records) > 50:  # Pass small count updates back to the main thread to be grouped
-                errors = global_bq_client.insert_rows_json(junit_table_id, junit_records)
+                errors = global_bq_client.insert_rows_json(global_bucket_info.table_id_junit, junit_records)
                 if errors != []:
                     print(f'ERROR: thread could not insert records: {errors}')
                 junit_records.clear()
@@ -975,7 +1010,7 @@ def parse_junit_pr_from_gcs_file_path(file_path: str) -> List[Dict]:
             # each thread, if it has a significant number of records, will make its own bigquery insert.
 
             if junit_records and len(junit_records) > 50 and len(junit_records) < 1000:  # Pass small count updates back to the main thread to be grouped
-                errors = global_bq_client.insert_rows_json(junit_pr_table_id, junit_records)
+                errors = global_bq_client.insert_rows_json(global_bucket_info.table_id_junit_pr, junit_records)
                 if errors != []:
                     print(f'ERROR: thread could not insert records: {errors}')
                 junit_records.clear()
@@ -1022,7 +1057,7 @@ def process_job_intervals_from_gcs_file_path(file_path: str):
     remaining_records = record_dicts
     while remaining_records:
         chunk, remaining_records = remaining_records[:chunk_size], remaining_records[chunk_size:]
-        errors.extend(bq.insert_rows_json(job_intervals_table_id, chunk))
+        errors.extend(bq.insert_rows_json(global_bucket_info.table_id_job_intervals, chunk))
     if errors == []:
         print(f"New rows have been added: {len(record_dicts)}.")
     else:
@@ -1034,7 +1069,7 @@ def process_releaseinfo_from_gcs_file_path(file_path: str):
     if not record_dicts:
         return
     bq = global_bq_client
-    errors = bq.insert_rows_json(releaseinfo_table_id, record_dicts)
+    errors = bq.insert_rows_json(global_bucket_info.table_id_job_releases, record_dicts)
     if errors == []:
         print("New rows have been added.")
     else:
@@ -1046,23 +1081,11 @@ def process_prowjob_from_gcs(file_path: str):
     if not record_dict:
         return
     bq = global_bq_client
-    errors = bq.insert_rows_json(jobs_table_id, [record_dict])
+    errors = bq.insert_rows_json(global_bucket_info.table_id_jobs, [record_dict])
     if errors == []:
         print("New rows have been added.")
     else:
         raise IOError("Encountered errors while inserting rows: {}".format(errors))
-
-
-def process_releaseinfo_from_gcs(build_id: str, file_path: str):
-    releaseinfo_records = parse_releaseinfo_from_gcs(build_id, file_path)
-    if not releaseinfo_records:
-        return
-    bq = global_bq_client
-    errors = bq.insert_rows_json(ci_operator_logs_table_id, releaseinfo_records)
-    if errors == []:
-        print("New releaseinfo rows have been added.")
-    else:
-        raise IOError("Encountered errors while inserting releaseinfo rows: {}".format(errors))
 
 
 def gcs_finalize(event, context):
@@ -1074,11 +1097,12 @@ def gcs_finalize(event, context):
     file = event
     bucket: str = file["bucket"]
     gcs_file_name: str = file['name']
-    process_connection_setup(bucket=bucket)
 
     if gcs_file_name.endswith("/prowjob.json"):
+        process_connection_setup(bucket=bucket)
         process_prowjob_from_gcs(gcs_file_name)
     elif gcs_file_name.endswith('/finished.json'):
+        process_connection_setup(bucket=bucket)
         # We need to find the prowjob build-id which should be 1 level down
         # branch-ci-openshift-jenkins-release-4.10-images/1604867803796475904/finished.json
         file_path = pathlib.Path(gcs_file_name)
@@ -1086,6 +1110,7 @@ def gcs_finalize(event, context):
         ci_operator_log_path = file_path.parent.joinpath('artifacts/ci-operator.log')
         process_ci_operator_log_from_gcs(prowjob_build_id, str(ci_operator_log_path))
     elif gcs_file_name.endswith('.xml'):
+        process_connection_setup(bucket=bucket)
         junit_match = junit_path_pattern.match(gcs_file_name)
         if junit_match:
             prowjob_name = junit_match.group(2)
@@ -1097,8 +1122,10 @@ def gcs_finalize(event, context):
                 process_junit_file_from_gcs(prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id,
                                             file_path=gcs_file_name)
     elif gcs_file_name.endswith('/releaseinfo.json'):
+        process_connection_setup(bucket=bucket)
         process_releaseinfo_from_gcs_file_path(gcs_file_name)
     elif 'e2e-timelines_everything_' in gcs_file_name and gcs_file_name.endswith('.json'):
+        process_connection_setup(bucket=bucket)
         process_job_intervals_from_gcs_file_path(gcs_file_name)
 
 
@@ -1111,7 +1138,7 @@ def qe_process_queue(input_queue):
 
 
 def ci_process_queue(input_queue):
-    process_connection_setup()
+    process_connection_setup('test-platform-results')
 
     for event in iter(input_queue.get, 'STOP'):
         gcs_finalize(event, None)
@@ -1145,7 +1172,7 @@ def cold_load_qe():
 
 
 def cold_load_intervals():
-    process_connection_setup()
+    process_connection_setup('test-platform-results')
 
     origin_ci_test_usage_table_id = 'openshift-gce-devel.ci_analysis_us.origin-ci-test_usage_analysis_intervals'
     query_relevant_storage_paths = f"""
