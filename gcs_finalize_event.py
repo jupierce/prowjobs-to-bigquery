@@ -712,6 +712,11 @@ class JUnitHandler(sax.handler.ContentHandler):
 
             lc = self.prowjob_name.lower()
             other_variants = determine_other_variants(lc)
+
+            if lc == 'periodic-ci-openshift-release-master-nightly-4.15-e2e-vsphere-static-ovn':
+                # https://issues.redhat.com/browse/TRT-1508
+                other_variants.append('techpreview')
+
             record = JUnitTestRecord(
                 prowjob_build_id=self.prowjob_build_id,
                 file_path=self.file_path,
