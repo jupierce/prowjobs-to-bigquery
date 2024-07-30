@@ -82,6 +82,7 @@ DEFAULT_TABLE_NAMES = {
 BUCKET_INFO_MAPPING = {
     'test-platform-results': BucketInfo(bucket_project='openshift-gce-devel', dest_bigquery_dataset='openshift-gce-devel.ci_analysis_us', **DEFAULT_TABLE_NAMES),
     'qe-private-deck': BucketInfo(bucket_project='openshift-ci-private', dest_bigquery_dataset='openshift-gce-devel.qe_testing', **DEFAULT_TABLE_NAMES),
+    'origin-ci-private': BucketInfo(bucket_project='openshift-ci-private', dest_bigquery_dataset='openshift-gce-devel.ci_analysis_private', **DEFAULT_TABLE_NAMES),
 }
 
 
