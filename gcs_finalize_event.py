@@ -1114,14 +1114,90 @@ def cold_load_intervals():
 
 PROWJOB_URL_BUCKET_PREFIX = 'https://prow.ci.openshift.org/view/gs/test-platform-results/'
 
+CI_OPERATOR_USING_NAMESPACE_PATTERN = re.compile(r"(Using namespace .*\.(?P<ci_cluster>build\d+)\..*/(?P<ci_namespace>[^/]+))$")
+
 
 def ci_operator_logs_json_process_queue(input_queue):
     process_connection_setup('test-platform-results')
+    rows_added = 0  # How many rows this particular worker has added
+
+    table_ref = global_bq_client.dataset('ci_analysis_us').table('ci_operator_logs_json')
+    ci_operator_logs_json_table = global_bq_client.get_table(table_ref)
+
+    rows_to_insert = []
+    rows_to_insert_size_estimate = 0
 
     for event in iter(input_queue.get, 'STOP'):
         prowjob_build_id = event['prowjob_build_id']
         file_path = event['file_path']
-        process_ci_operator_log_from_gcs(prowjob_build_id, file_path)
+
+        try:
+            b = global_result_storage_bucket_client.get_blob(file_path)
+            if not b:
+                continue
+
+            blob_created_at = b.time_created
+            if b.size < 1000000:
+                ci_operator_jsonl_str: str = b.download_as_text()
+            else:
+                continue
+
+            lines = ci_operator_jsonl_str.strip().split('\n')
+            log_entries = [json.loads(line) for line in lines]
+
+            ci_cluster = None
+            ci_namespace = None
+            final_entries = []
+            for entry in log_entries:
+                if 'msg' not in entry or 'level' not in entry:
+                    continue
+
+                if entry['level'] in ('debug', 'trace',):
+                    continue
+
+                msg: str = entry['msg']
+
+                if msg.startswith('Using namespace '):
+                    m = CI_OPERATOR_USING_NAMESPACE_PATTERN.match(msg)
+                    if m:
+                        ci_cluster = m.group('ci_cluster')
+                        ci_namespace = m.group('ci_namespace')
+
+                if len(msg) > 1000000:
+                    msg = msg[:50000] + "...TRUNCATED..." + msg[-50000:]
+                    entry['msg'] = msg
+
+                final_entries.append(entry)
+                rows_to_insert_size_estimate += int(len(msg) * 1.10)  # Add 10% escaping overhead
+
+            new_row = {
+                'created': str(blob_created_at),
+                'prowjob_build_id': prowjob_build_id,
+                'path': file_path,
+                'file_size': b.size,
+                'ci_cluster': ci_cluster,
+                'ci_namespace': ci_namespace,
+                'entries': final_entries,
+            }
+            rows_to_insert.append(new_row)
+            rows_to_insert_size_estimate += 2048  # Add size of other fields once encoded into JSON.
+
+            rows_added += 1
+            if rows_added % 100 == 0:
+                print(f'Worker {os.getpid()} has processed {rows_added}')
+
+            if rows_to_insert_size_estimate > 5 * 1024 * 1024:  # Bigquery's insert limit is 10MB, so keep well under that.
+                errors = global_bq_client.insert_rows(ci_operator_logs_json_table, rows_to_insert)
+                if errors == []:
+                    print(f"Worker {os.getpid()} successfully appended rows: {len(rows_to_insert)}")
+                else:
+                    raise IOError("Encountered errors while inserting rows: {}".format(errors))
+
+                rows_to_insert = []
+                rows_to_insert_size_estimate = 0
+
+        except Exception as e:
+            print(f'Failed on {file_path}: {e}')
 
 
 def cold_load_ci_operator_logs_json():
@@ -1136,8 +1212,8 @@ def cold_load_ci_operator_logs_json():
     paths = global_bq_client.query(query_relevant_storage_paths)
 
     queue = multiprocessing.Queue(os.cpu_count() * 1000)
-    LOADS_PER_CPU = 4  # Most of the job is waiting for the insert.result()
-    worker_pool = [multiprocessing.Process(target=ci_operator_logs_json_process_queue, args=(queue,)) for _ in range(LOADS_PER_CPU * max(os.cpu_count() - 2, 1))]
+    workers_per_cpu = 1
+    worker_pool = [multiprocessing.Process(target=ci_operator_logs_json_process_queue, args=(queue,)) for _ in range(workers_per_cpu * os.cpu_count())]
     for worker in worker_pool:
         worker.start()
 
@@ -1150,7 +1226,7 @@ def cold_load_ci_operator_logs_json():
 
         bucket_path_to_job_files = prowjob_url[len(PROWJOB_URL_BUCKET_PREFIX):]  # Turn prowjob url to path in bucket
         bucket_path_to_ci_operator_logs = f'{bucket_path_to_job_files}/artifacts/ci-operator.log'
-        print(f'Processing {bucket_path_to_ci_operator_logs}')
+        # print(f'Processing {bucket_path_to_ci_operator_logs}')
         event = {
             'prowjob_build_id': prowjob_build_id,
             'file_path': bucket_path_to_ci_operator_logs
