@@ -118,7 +118,7 @@ def process_connection_setup(bucket: str):
         bucket_project = global_bucket_info.bucket_project
         global_storage_client = storage.Client(project=bucket_project)
         global_result_storage_bucket_client = global_storage_client.bucket(bucket)
-        global_bq_client = bigquery.Client()
+        global_bq_client = bigquery.Client(project='openshift-gce-devel')
 
 
 class JobsRecord(NamedTuple):
@@ -237,57 +237,6 @@ class JUnitTestRecord(NamedTuple):
     flake_count: int
 
 
-class CiOperatorLogRecord(NamedTuple):
-    schema_level: int
-    file_path: str
-    prowjob_build_id: str
-    test_name: str  # multi-stage-test name when multi-stage
-    step_name: Optional[str]  # if a step was being run
-    build_name: Optional[str]  # if a build is being run
-    slice_name: Optional[str]  # if a slice is being acquired
-    lease_name: Optional[str]  # if a lease is being acquired
-    prowjob_cluster: Optional[str]
-    prowjob_cluster_namespace: Optional[str]
-    started_at: str
-    finished_at: str
-    duration_ms: int
-    success: bool
-
-
-# Regex for parsing ci-operator.log insights.
-# Parsing json and then looking for specific messages is CPU intensive relative to
-# a regex. For performance reasons, union the regex into one big one. Setup sub expressions that should consume
-# up to, but not including, the closing quotation mark of msg.
-sub_expressions = [
-    # Example Acquiring leases for test launch: [aws-2-quota-slice]
-    r"(Acquiring leases for test (?P<acquiring_test_name>[^:]+): \[(?P<acquiring_slice_names>[^\]]+)\])",
-    # Example: Acquired 1 lease(s) for aws-quota-slice: [us-east-1--aws-quota-slice-28]
-    r"(Acquired (?P<lease_count>\d+) lease.s. for (?P<acquired_slice_name>[^:]+): (?P<lease_names>[^\s\"]+))",
-    # Example: Building src
-    r"(Building (?P<build_name_start>[^\"]+))",
-    # Examples:
-    # - Build aws-ebs-csi-driver succeeded after 2m5s
-    # - Build %s already succeeded in %s
-    # - Build %s failed, printing logs:
-    r"(Build (?P<build_name_outcome>[^\s]+)[^\"]+)",
-    # Example: Running multi-stage test e2e-aws-serial
-    r"(Running multi-stage test (?P<multi_stage_name>[^\s\"]+))",
-    # Example: Running step e2e-aws-serial-ipi-install-hosted-loki.
-    r"(Running step (?P<step_name_start>[^\s]+)\.)",
-    # Examples:
-    # - Step launch-ipi-conf succeeded after 30s
-    # - Step launch-ipi-conf failed after 30s
-    r"(Step (?P<step_name_outcome>[^\s]+) (?P<step_outcome>[^\s]+) after [^\"]+)",
-    # Extract build farm and ci-op namespace
-    r"(Using namespace .*\.(?P<prowjob_cluster>build\d+)\..*(?P<prowjob_cluster_namespace>ci-op.*))",
-]
-
-combined_pattern = r"{\"level\":\"\w+\",\"msg\":\"(?:" + \
-                    '|'.join(sub_expressions) + \
-                   r")\",\"time\":\"(?P<dt>[^\"]+)\"}"
-
-log_entry_pattern = re.compile(combined_pattern)
-
 # Group 1 extracts path up to prowjob id (e.g. 	branch-ci-openshift-jenkins-release-4.10-images/1604867803796475904 ).
 # Group 2 extracts prowjob name
 # Group 3 extracts the prowjob numeric id  (requires id be at least 12 digits to avoid finding PR number)
@@ -370,122 +319,6 @@ def parse_releaseinfo_json(prowjob_name: str, prowjob_build_id: str, releaseinfo
         records.append(record)
 
     return records
-
-
-def parse_ci_operator_log_resources_text(ci_operator_log_file: str, prowjob_build_id: str, ci_operator_log_str: str) -> List[Dict]:
-
-    def ms_diff_from_time_strs(start, stop) -> int:
-        ts_start = datetime.datetime.strptime(start + ' UTC', '%Y-%m-%dT%H:%M:%S %Z')
-        ts_stop = datetime.datetime.strptime(stop + ' UTC', '%Y-%m-%dT%H:%M:%S %Z')
-        return int((ts_stop - ts_start) / datetime.timedelta(milliseconds=1))
-
-    log_records: List[Dict] = list()
-    prowjob_cluster = None
-    prowjob_cluster_namespace = None
-    multi_stage_test_name = None
-    build_start: Dict[str, str] = dict()
-    step_start: Dict[str, str] = dict()
-    lease_start: Dict[str, str] = dict()
-    for log_line in ci_operator_log_str.splitlines():
-        m = log_entry_pattern.match(log_line)
-        if not m:
-            # Not a log entry we are interested in
-            continue
-
-        dt = m.group('dt').rstrip('Z')  # '2023-02-03T13:33:30Z' -> '2023-02-03T13:33:30'
-
-        if m.group('multi_stage_name'):
-            multi_stage_test_name = m.group('multi_stage_name')
-
-        if m.group('prowjob_cluster'):
-            prowjob_cluster = m.group('prowjob_cluster')
-
-        if m.group('prowjob_cluster_namespace'):
-            prowjob_cluster_namespace = m.group('prowjob_cluster_namespace')
-
-        # Leases
-        if m.group('acquiring_test_name'):
-            multi_stage_test_name = m.group('acquiring_test_name')
-            for lease_name in m.group('acquiring_slice_names').split():
-                lease_start[lease_name] = dt
-
-        if m.group('acquired_slice_name'):
-            slice_name = m.group('acquired_slice_name')
-            lease_name = m.group('lease_names')
-            if slice_name in lease_start:
-                start_time = lease_start.pop(slice_name)
-            else:
-                print(f'Unable to find start lease time in {ci_operator_log_file}')
-                start_time = dt
-
-            record = CiOperatorLogRecord(
-                schema_level=CI_OPERATOR_LOGS_SCHEMA_LEVEL,
-                file_path=ci_operator_log_file,
-                step_name=None,
-                build_name=None,
-                slice_name=slice_name,
-                lease_name=lease_name,
-                started_at=start_time,
-                finished_at=dt,
-                duration_ms=ms_diff_from_time_strs(start_time, dt),
-                prowjob_build_id=prowjob_build_id,
-                test_name=multi_stage_test_name,
-                success=True,
-                prowjob_cluster=prowjob_cluster,
-                prowjob_cluster_namespace=prowjob_cluster_namespace,
-            )
-            log_records.append(record._asdict())
-
-        # Builds
-        if m.group('build_name_start'):
-            build_start[m.group('build_name_start')] = dt
-
-        if m.group('build_name_outcome'):
-            if m.group('build_name_outcome') in build_start:  # Will not be present if the build is cached.
-                start_time = build_start.pop(m.group('build_name_outcome'))
-                record = CiOperatorLogRecord(
-                    schema_level=CI_OPERATOR_LOGS_SCHEMA_LEVEL,
-                    file_path=ci_operator_log_file,
-                    step_name=None,
-                    build_name=m.group('build_name_outcome'),
-                    slice_name=None,
-                    lease_name=None,
-                    started_at=start_time,
-                    finished_at=dt,
-                    duration_ms=ms_diff_from_time_strs(start_time, dt),
-                    prowjob_build_id=prowjob_build_id,
-                    test_name=multi_stage_test_name,
-                    success='succeeded' in log_line,
-                    prowjob_cluster=prowjob_cluster,
-                    prowjob_cluster_namespace=prowjob_cluster_namespace,
-                )
-                log_records.append(record._asdict())
-
-        # Steps
-        if m.group('step_name_start'):
-            step_start[m.group('step_name_start')] = dt
-
-        if m.group('step_name_outcome'):
-            start_time = step_start.pop(m.group('step_name_outcome'))
-            record = CiOperatorLogRecord(
-                schema_level=CI_OPERATOR_LOGS_SCHEMA_LEVEL,
-                file_path=ci_operator_log_file,
-                step_name=m.group('step_name_outcome')[len(multi_stage_test_name)+1:],  # Strip off multi-stage test name prefix to just leave registry step name
-                build_name=None,
-                slice_name=None,
-                lease_name=None,
-                started_at=start_time,
-                finished_at=dt,
-                duration_ms=ms_diff_from_time_strs(start_time, dt),
-                prowjob_build_id=prowjob_build_id,
-                test_name=multi_stage_test_name,
-                success='succeeded' in m.group('step_outcome'),
-                prowjob_cluster=prowjob_cluster,
-                prowjob_cluster_namespace=prowjob_cluster_namespace,
-            )
-            log_records.append(record._asdict())
-
-    return log_records
 
 
 class SimpleErrorHandler(sax.handler.ErrorHandler):
@@ -864,19 +697,6 @@ def parse_prowjob_json(prowjob_json_text):
     return record_dict
 
 
-def parse_ci_operator_log_resources_from_gcs(build_id: str, file_path: str) -> Optional[List[Dict]]:
-    try:
-        b = global_result_storage_bucket_client.get_blob(file_path)
-        if not b:
-            return None
-
-        ci_operator_log_text = b.download_as_text()
-        return parse_ci_operator_log_resources_text(file_path, build_id, ci_operator_log_text)
-    except Exception as e:
-        print(f'Error retrieving ci-operator log file: {file_path}: {e}')
-        return []
-
-
 def parse_prowjob_from_gcs(file_path: str):
     b = global_result_storage_bucket_client.get_blob(file_path)
     if not b:
@@ -961,20 +781,99 @@ def process_pr_junit_file_from_gcs(prowjob_name: str, prowjob_build_id: str, fil
 
 
 def process_ci_operator_log_from_gcs(build_id: str, file_path: str):
-    ci_operator_log_records = parse_ci_operator_log_resources_from_gcs(build_id, file_path)
-    if not ci_operator_log_records:
-        return
-    bq = global_bq_client
-    errors = bq.insert_rows_json(global_bucket_info.table_id_ci_operator_logs, ci_operator_log_records)
-    if errors == []:
-        print("New rows have been added.")
-    else:
-        raise IOError("Encountered errors while inserting rows: {}".format(errors))
+    try:
+        b = global_result_storage_bucket_client.get_blob(file_path)
+        if not b:
+            return None
 
+        blob_created_at = b.time_created
+        if b.size < 1000000:
+            ci_operator_jsonl_str = b.download_as_text()
+        else:
+            ci_operator_jsonl_str = '"ingestion issue: ci-operator.log file too large"'
 
-def parse_ci_operator_log_from_gcs_file_path(file_path: str) -> List[Dict]:
-    prowjob_build_id = pathlib.Path(file_path).parent.parent.name
-    return parse_ci_operator_log_resources_from_gcs(prowjob_build_id, file_path)
+        # ci_operator_jsonl_str is a str containing a JSONL document. Parsing it in lambda could be CPU
+        # intensive. So we offload that to bigquery by turning the JSONL into a
+        # JSON array. With some SQL magic, bigquery can parse this JSON, and then
+        # insert it into a JSON REPEATED column.
+
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("json_str", "STRING", ci_operator_jsonl_str),
+            ]
+        )
+
+        bq = global_bq_client
+        query_job = bq.query(f'''
+DECLARE max_msg_size INT64 DEFAULT 100000;
+
+INSERT INTO `openshift-gce-devel.ci_analysis_us.ci_operator_logs_json`
+(
+    created, 
+    prowjob_build_id, 
+    path, 
+    file_size,
+    ci_cluster,
+    ci_namespace,
+    entries
+) 
+WITH json_str_rows AS (
+
+  # Split the jsonl table named json_str_rows with a column named lines where
+  # each row contains a single json entry (still as a string)
+  SELECT SPLIT(TRIM(@json_str), "\\n") as lines,
+
+), json_obj_rows AS (
+
+  # Create a table named json_obj_rows with a column named entry where
+  # each line of json_str_rows is parsed into a JSON object.
+  # Include another column named "entry_length" which is the length
+  # of the string that created the JSON object.
+  SELECT
+    PARSE_JSON(line) as entry, LENGTH(line) as entry_length
+  FROM
+    json_str_rows, UNNEST(lines) as line
+
+), json_truncated_obj_rows AS (
+
+  # For each JSON object in json_obj_rows, see if the entry_length
+  # is > the maximum size we permit, and truncate msg if it is.
+  # Output a table named json_obj_rows with a single column entry
+  # that has msg truncated, where necessary.
+  # Only propagate entries that are level > debug.
+  SELECT
+    IF(entry_length < max_msg_size, entry, JSON_SET(entry, "$.msg", CONCAT(LEFT(JSON_VALUE(entry, "$.msg"), max_msg_size >> 1), "...TRUNCATED...", RIGHT(JSON_VALUE(entry, "$.msg"), max_msg_size >> 1)))) as entry
+  FROM json_obj_rows
+  WHERE JSON_VALUE(entry, "$.level") NOT IN ("debug", "trace")  
+), job_facts AS (
+  # Search for the "Using namespace " info msg which includes the build farm name build\d+
+  # and the ci_namespace in which the job was run.
+  # Example: Using namespace https://console.build01.ci.openshift.org/k8s/cluster/projects/ci-op-9vl5q5ch
+  # The LEFT OUTER JOIN ON TRUE will ensure that a row is inserted with NULL for ci_cluster
+  SELECT
+    REGEXP_EXTRACT(JSON_VALUE(entry, "$.msg"), r'.*(build\\d+).*') as ci_cluster,
+    REGEXP_EXTRACT(JSON_VALUE(entry, "$.msg"),  r'/([^/]+)$') as ci_namespace
+  FROM json_truncated_obj_rows
+  WHERE STARTS_WITH(JSON_VALUE(entry, "$.msg"), "Using namespace http")
+  LIMIT 1
+)
+# Formulate a single row for insertion where the JSON entries are aggregated into an 
+# array so that they can populated a REPEATED JSON column in the target table.
+SELECT 
+    TIMESTAMP("{str(blob_created_at)}"), 
+    "{build_id}", 
+    "{file_path}", 
+    {b.size}, 
+    job_facts.ci_cluster,
+    job_facts.ci_namespace,
+    ARRAY_AGG(json_truncated_obj_rows.entry)
+FROM json_truncated_obj_rows LEFT OUTER JOIN job_facts ON TRUE
+GROUP BY job_facts.ci_cluster, job_facts.ci_namespace
+
+''', job_config=job_config)
+        query_job.result()  # Wait for the job to complete
+    except Exception as e:
+        print(f'Error inserting ci-operator log file: {file_path}: {e}')
 
 
 def parse_junit_from_gcs_file_path(file_path: str) -> List[Dict]:
@@ -1213,6 +1112,61 @@ def cold_load_intervals():
         worker.join()
 
 
+PROWJOB_URL_BUCKET_PREFIX = 'https://prow.ci.openshift.org/view/gs/test-platform-results/'
+
+
+def ci_operator_logs_json_process_queue(input_queue):
+    process_connection_setup('test-platform-results')
+
+    for event in iter(input_queue.get, 'STOP'):
+        prowjob_build_id = event['prowjob_build_id']
+        file_path = event['file_path']
+        process_ci_operator_log_from_gcs(prowjob_build_id, file_path)
+
+
+def cold_load_ci_operator_logs_json():
+    process_connection_setup('test-platform-results')
+
+    jobs_table_id = 'openshift-gce-devel.ci_analysis_us.jobs'
+    query_relevant_storage_paths = f"""
+    SELECT prowjob_build_id, prowjob_url FROM `{jobs_table_id}`
+    WHERE prowjob_start > DATETIME("2024-08-02")
+    """
+
+    paths = global_bq_client.query(query_relevant_storage_paths)
+
+    queue = multiprocessing.Queue(os.cpu_count() * 1000)
+    LOADS_PER_CPU = 4  # Most of the job is waiting for the insert.result()
+    worker_pool = [multiprocessing.Process(target=ci_operator_logs_json_process_queue, args=(queue,)) for _ in range(LOADS_PER_CPU * max(os.cpu_count() - 2, 1))]
+    for worker in worker_pool:
+        worker.start()
+
+    object_count = 0
+    for record in paths:
+        prowjob_url = record['prowjob_url']
+        prowjob_build_id = record['prowjob_build_id']
+        if not prowjob_url:
+            continue
+
+        bucket_path_to_job_files = prowjob_url[len(PROWJOB_URL_BUCKET_PREFIX):]  # Turn prowjob url to path in bucket
+        bucket_path_to_ci_operator_logs = f'{bucket_path_to_job_files}/artifacts/ci-operator.log'
+        print(f'Processing {bucket_path_to_ci_operator_logs}')
+        event = {
+            'prowjob_build_id': prowjob_build_id,
+            'file_path': bucket_path_to_ci_operator_logs
+        }
+        queue.put(event)
+        object_count += 1
+        if object_count % 10000 == 0:
+            print(object_count)
+
+    for worker in worker_pool:
+        queue.put('STOP')
+
+    for worker in worker_pool:
+        worker.join()
+
+
 if __name__ == '__main__':
     # outcome = parse_ci_operator_graph_resources_json('abcdefg', pathlib.Path("ci-operator-graphs/ci-operator-step-graph-1.json").read_text())
     # import yaml
@@ -1230,4 +1184,6 @@ if __name__ == '__main__':
 
     #process_connection_setup()
     #process_job_intervals_from_gcs_file_path('pr-logs/pull/openshift_cluster-authentication-operator/638/pull-ci-openshift-cluster-authentication-operator-release-4.13-e2e-agnostic-upgrade/1715405306432851968/artifacts/e2e-agnostic-upgrade/openshift-e2e-test/artifacts/junit/e2e-timelines_everything_20231020-173307.json')
-    cold_load_intervals()
+    # cold_load_intervals()
+
+    cold_load_ci_operator_logs_json()
