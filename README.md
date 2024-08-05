@@ -25,7 +25,7 @@ DELETE FROM `openshift-gce-devel.ci_analysis_us.origin-ci-test_usage_analysis` W
 ```                                                                                                
 - 
 - Change schema_version in gcs_finalize_event.py
-- Setup massive system in GCE running debian (e.g. n2-highcpu-96) - configure to runs as aos-kettle. SET CLOUD API SCOPE TO FULL.
+- Setup massive system in GCE running debian (e.g. n2-standard-96) - configure to runs as aos-kettle. SET CLOUD API SCOPE TO FULL.
 - sudo apt install python3 python3-pip
 - sudo pip install --break-system-packages google-cloud-storage google-cloud-bigquery future lxml
 - Upload model.py and gcs_finalize_event.py to /loader
