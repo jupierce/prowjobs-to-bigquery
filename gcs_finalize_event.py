@@ -12,15 +12,16 @@ from xml import sax
 
 from io import StringIO
 from typing import NamedTuple, List, Dict, Optional
+
 from model import Model, Missing
 from collections import defaultdict
 
 from google.cloud import bigquery, storage
 
 RELEASEINFO_SCHEMA_LEVEL = 2
-CI_OPERATOR_LOGS_SCHEMA_LEVEL = 11
+CI_OPERATOR_LOGS_JSON_SCHEMA_LEVEL = 15
 JUNIT_TABLE_SCHEMA_LEVEL = 14
-JOB_INTERVALS_SCHEMA_LEVEL = 2
+JOB_INTERVALS_SCHEMA_LEVEL = 3
 
 
 class BucketInfo(NamedTuple):
@@ -32,6 +33,11 @@ class BucketInfo(NamedTuple):
     # could impact execution size/time & thus cost.
     bucket_project: str
 
+    # The project in which the dataset resides
+    bigquery_project: str
+
+    bucket_url_prefix: str
+
     # As data is written to a bucket, this cloud function will append data to a set of tables in a destination dataset.
     # Writing to one bucket will trigger updates to
     dest_bigquery_dataset: str
@@ -41,7 +47,7 @@ class BucketInfo(NamedTuple):
     table_name_junit_pr: str
     table_name_job_intervals: str
     table_name_job_releases: str
-    table_name_ci_operator_logs: str
+    table_name_ci_operator_logs_json: str
 
     @property
     def table_id_jobs(self):
@@ -64,8 +70,8 @@ class BucketInfo(NamedTuple):
         return f'{self.dest_bigquery_dataset}.{self.table_name_job_releases}'
 
     @property
-    def table_id_ci_operator_logs(self):
-        return f'{self.dest_bigquery_dataset}.{self.table_name_ci_operator_logs}'
+    def table_id_ci_operator_logs_json(self):
+        return f'{self.dest_bigquery_dataset}.{self.table_name_ci_operator_logs_json}'
 
 
 DEFAULT_TABLE_NAMES = {
@@ -74,15 +80,33 @@ DEFAULT_TABLE_NAMES = {
     'table_name_junit_pr': 'junit_pr',
     'table_name_job_intervals': 'job_intervals',
     'table_name_job_releases': 'job_releases',
-    'table_name_ci_operator_logs': 'ci_operator_logs'
+    'table_name_ci_operator_logs_json': 'ci_operator_logs_json'
 }
 
 
 # The list of buckets to react to and the datasets to update when writes are made to that bucket.
 BUCKET_INFO_MAPPING = {
-    'test-platform-results': BucketInfo(bucket_project='openshift-gce-devel', dest_bigquery_dataset='openshift-gce-devel.ci_analysis_us', **DEFAULT_TABLE_NAMES),
-    'qe-private-deck': BucketInfo(bucket_project='openshift-ci-private', dest_bigquery_dataset='openshift-gce-devel.qe_testing', **DEFAULT_TABLE_NAMES),
-    'origin-ci-private': BucketInfo(bucket_project='openshift-ci-private', dest_bigquery_dataset='openshift-gce-devel.ci_analysis_private', **DEFAULT_TABLE_NAMES),
+    'test-platform-results': BucketInfo(
+        bucket_project='openshift-gce-devel',
+        bucket_url_prefix='https://prow.ci.openshift.org/view/gs/test-platform-results/',
+        bigquery_project='openshift-gce-devel',
+        dest_bigquery_dataset='openshift-gce-devel.ci_analysis_us',
+        **DEFAULT_TABLE_NAMES
+    ),
+    'qe-private-deck': BucketInfo(
+        bucket_project='openshift-ci-private',
+        bucket_url_prefix='https://qe-private-deck-ci.apps.ci.l2s4.p1.openshiftapps.com/view/gs/qe-private-deck/',
+        bigquery_project='openshift-gce-devel',
+        dest_bigquery_dataset='openshift-gce-devel.qe_testing',
+        **DEFAULT_TABLE_NAMES
+    ),
+    'origin-ci-private': BucketInfo(
+        bucket_project='openshift-ci-private',
+        bucket_url_prefix='https://deck-internal-ci.apps.ci.l2s4.p1.openshiftapps.com/view/gs/origin-ci-private/',
+        bigquery_project='openshift-gce-devel',
+        dest_bigquery_dataset='openshift-gce-devel.ci_analysis_private',
+        **DEFAULT_TABLE_NAMES
+    ),
 }
 
 
@@ -118,7 +142,7 @@ def process_connection_setup(bucket: str):
         bucket_project = global_bucket_info.bucket_project
         global_storage_client = storage.Client(project=bucket_project)
         global_result_storage_bucket_client = global_storage_client.bucket(bucket)
-        global_bq_client = bigquery.Client(project='openshift-gce-devel')
+        global_bq_client = bigquery.Client(project=global_bucket_info.bigquery_project)
 
 
 class JobsRecord(NamedTuple):
@@ -275,7 +299,11 @@ def parse_job_intervals_json(prowjob_name: str, prowjob_build_id: str, job_inter
             source=item.get('source', None),
             from_time=to_ts(item['from']),
             to_time=to_ts(item['to']),
-            message=item.get('message', None),
+            # .message is a JSON string which insert_rows_json tries to put into a "RECORD".
+            # However .message is a string, so it throws an err. Disabling message for now since
+            # it is included in payload.
+            # message=item.get('message', None),
+            message=None,
             locator=item.get('locator', None),
             payload=json.dumps(item),
         )
@@ -760,7 +788,8 @@ def process_junit_file_from_gcs(prowjob_name: str, prowjob_build_id: str, file_p
     if errors == []:
         print(f"New rows have been added: {len(junit_records)}.")
     else:
-        raise IOError("Encountered errors while inserting rows: {}".format(errors))
+        print(f"Encountered errors while inserting junit rows ({file_path}): {errors[0]}")
+        raise IOError("Encountered errors while inserting junit rows")
 
 
 def process_pr_junit_file_from_gcs(prowjob_name: str, prowjob_build_id: str, file_path: str):
@@ -769,7 +798,7 @@ def process_pr_junit_file_from_gcs(prowjob_name: str, prowjob_build_id: str, fil
         return
     bq = global_bq_client
     errors = []
-    chunk_size = 1000  # bigquery will return 413 if incoming request is too large (10MB). Chunk the results if they are long
+    chunk_size = 500  # bigquery will return 413 if incoming request is too large (10MB). Chunk the results if they are long
     remaining_records = junit_records
     while remaining_records:
         chunk, remaining_records = remaining_records[:chunk_size], remaining_records[chunk_size:]
@@ -777,103 +806,8 @@ def process_pr_junit_file_from_gcs(prowjob_name: str, prowjob_build_id: str, fil
     if errors == []:
         print(f"New rows have been added: {len(junit_records)}.")
     else:
-        raise IOError("Encountered errors while inserting rows: {}".format(errors))
-
-
-def process_ci_operator_log_from_gcs(build_id: str, file_path: str):
-    try:
-        b = global_result_storage_bucket_client.get_blob(file_path)
-        if not b:
-            return None
-
-        blob_created_at = b.time_created
-        if b.size < 1000000:
-            ci_operator_jsonl_str = b.download_as_text()
-        else:
-            ci_operator_jsonl_str = '"ingestion issue: ci-operator.log file too large"'
-
-        # ci_operator_jsonl_str is a str containing a JSONL document. Parsing it in lambda could be CPU
-        # intensive. So we offload that to bigquery by turning the JSONL into a
-        # JSON array. With some SQL magic, bigquery can parse this JSON, and then
-        # insert it into a JSON REPEATED column.
-
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ScalarQueryParameter("json_str", "STRING", ci_operator_jsonl_str),
-            ]
-        )
-
-        bq = global_bq_client
-        query_job = bq.query(f'''
-DECLARE max_msg_size INT64 DEFAULT 100000;
-
-INSERT INTO `openshift-gce-devel.ci_analysis_us.ci_operator_logs_json`
-(
-    created, 
-    prowjob_build_id, 
-    path, 
-    file_size,
-    ci_cluster,
-    ci_namespace,
-    entries
-) 
-WITH json_str_rows AS (
-
-  # Split the jsonl table named json_str_rows with a column named lines where
-  # each row contains a single json entry (still as a string)
-  SELECT SPLIT(TRIM(@json_str), "\\n") as lines,
-
-), json_obj_rows AS (
-
-  # Create a table named json_obj_rows with a column named entry where
-  # each line of json_str_rows is parsed into a JSON object.
-  # Include another column named "entry_length" which is the length
-  # of the string that created the JSON object.
-  SELECT
-    PARSE_JSON(line) as entry, LENGTH(line) as entry_length
-  FROM
-    json_str_rows, UNNEST(lines) as line
-
-), json_truncated_obj_rows AS (
-
-  # For each JSON object in json_obj_rows, see if the entry_length
-  # is > the maximum size we permit, and truncate msg if it is.
-  # Output a table named json_obj_rows with a single column entry
-  # that has msg truncated, where necessary.
-  # Only propagate entries that are level > debug.
-  SELECT
-    IF(entry_length < max_msg_size, entry, JSON_SET(entry, "$.msg", CONCAT(LEFT(JSON_VALUE(entry, "$.msg"), max_msg_size >> 1), "...TRUNCATED...", RIGHT(JSON_VALUE(entry, "$.msg"), max_msg_size >> 1)))) as entry
-  FROM json_obj_rows
-  WHERE JSON_VALUE(entry, "$.level") NOT IN ("debug", "trace")  
-), job_facts AS (
-  # Search for the "Using namespace " info msg which includes the build farm name build\d+
-  # and the ci_namespace in which the job was run.
-  # Example: Using namespace https://console.build01.ci.openshift.org/k8s/cluster/projects/ci-op-9vl5q5ch
-  # The LEFT OUTER JOIN ON TRUE will ensure that a row is inserted with NULL for ci_cluster
-  SELECT
-    REGEXP_EXTRACT(JSON_VALUE(entry, "$.msg"), r'.*(build\\d+).*') as ci_cluster,
-    REGEXP_EXTRACT(JSON_VALUE(entry, "$.msg"),  r'/([^/]+)$') as ci_namespace
-  FROM json_truncated_obj_rows
-  WHERE STARTS_WITH(JSON_VALUE(entry, "$.msg"), "Using namespace http")
-  LIMIT 1
-)
-# Formulate a single row for insertion where the JSON entries are aggregated into an 
-# array so that they can populated a REPEATED JSON column in the target table.
-SELECT 
-    TIMESTAMP("{str(blob_created_at)}"), 
-    "{build_id}", 
-    "{file_path}", 
-    {b.size}, 
-    job_facts.ci_cluster,
-    job_facts.ci_namespace,
-    ARRAY_AGG(json_truncated_obj_rows.entry)
-FROM json_truncated_obj_rows LEFT OUTER JOIN job_facts ON TRUE
-GROUP BY job_facts.ci_cluster, job_facts.ci_namespace
-
-''', job_config=job_config)
-        query_job.result()  # Wait for the job to complete
-    except Exception as e:
-        print(f'Error inserting ci-operator log file: {file_path}: {e}')
+        print(f"Encountered errors while inserting junit rows ({file_path}): {errors[0]}")
+        raise IOError(f"Encountered errors while inserting junit rows")
 
 
 def parse_junit_from_gcs_file_path(file_path: str) -> List[Dict]:
@@ -958,15 +892,19 @@ def process_job_intervals_from_gcs_file_path(file_path: str):
         return
     bq = global_bq_client
     errors = []
-    chunk_size = 500  # bigquery will return 413 if incoming request is too large (10MB). Chunk the results if they are long
+    chunk_size = 100  # bigquery will return 413 if incoming request is too large (10MB). Chunk the results if they are long
     remaining_records = record_dicts
     while remaining_records:
         chunk, remaining_records = remaining_records[:chunk_size], remaining_records[chunk_size:]
-        errors.extend(bq.insert_rows_json(global_bucket_info.table_id_job_intervals, chunk))
+        op_errors = bq.insert_rows_json(global_bucket_info.table_id_job_intervals, chunk)
+        errors.extend(op_errors)
+        if op_errors != []:
+            print(f"Encountered errors while inserting intervals rows ({file_path}): First record: {chunk[0]} First error: {errors[0]}")
+
     if errors == []:
         print(f"New rows have been added: {len(record_dicts)}.")
     else:
-        raise IOError("Encountered errors while inserting rows: {}".format(errors))
+        raise IOError("Encountered errors while inserting intervals rows")
 
 
 def process_releaseinfo_from_gcs_file_path(file_path: str):
@@ -978,7 +916,8 @@ def process_releaseinfo_from_gcs_file_path(file_path: str):
     if errors == []:
         print("New rows have been added.")
     else:
-        raise IOError("Encountered errors while inserting rows: {}".format(errors))
+        print(f"Encountered errors while inserting release info rows ({file_path}): {errors[0]}")
+        raise IOError("Encountered errors while inserting release info rows")
 
 
 def process_prowjob_from_gcs(file_path: str):
@@ -990,7 +929,8 @@ def process_prowjob_from_gcs(file_path: str):
     if errors == []:
         print("New rows have been added.")
     else:
-        raise IOError("Encountered errors while inserting rows: {}".format(errors))
+        print(f"Encountered errors while inserting prowjob rows ({file_path}): {errors[0]}")
+        raise IOError("Encountered errors while inserting prowjob rows")
 
 
 def gcs_finalize(event, context):
@@ -1008,12 +948,17 @@ def gcs_finalize(event, context):
         process_prowjob_from_gcs(gcs_file_name)
     elif gcs_file_name.endswith('/finished.json'):
         process_connection_setup(bucket=bucket)
-        # We need to find the prowjob build-id which should be 1 level down
-        # branch-ci-openshift-jenkins-release-4.10-images/1604867803796475904/finished.json
         file_path = pathlib.Path(gcs_file_name)
-        prowjob_build_id = file_path.parent.name
         ci_operator_log_path = file_path.parent.joinpath('artifacts/ci-operator.log')
-        process_ci_operator_log_from_gcs(prowjob_build_id, str(ci_operator_log_path))
+        new_row, _ = process_ci_operator_logs_json_path(bucket, str(ci_operator_log_path))
+        if new_row is not None:
+            table_ref = global_bq_client.dataset('ci_analysis_us').table('ci_operator_logs_json')
+            ci_operator_logs_json_table = global_bq_client.get_table(table_ref)
+            errors = global_bq_client.insert_rows(ci_operator_logs_json_table, [new_row])
+            if errors != []:
+                print(f'Errors encountered while inserting ci-operator.log for {ci_operator_log_path}: {errors[0]}')
+                raise IOError("Encountered errors while inserting ci-operator.log rows")
+
     elif gcs_file_name.endswith('.xml'):
         process_connection_setup(bucket=bucket)
         junit_match = junit_path_pattern.match(gcs_file_name)
@@ -1112,131 +1057,206 @@ def cold_load_intervals():
         worker.join()
 
 
-PROWJOB_URL_BUCKET_PREFIX = 'https://prow.ci.openshift.org/view/gs/test-platform-results/'
+CI_OPERATOR_USING_NAMESPACE_PATTERN = re.compile(r"(Using namespace .*/(?P<ci_namespace>[^/]+))$")
+CI_OPERATOR_USING_FARM_NAME_PATTERN = re.compile(r"(Using namespace .*\.(?P<ci_cluster>build\d+)\..*)$")
+MAX_CI_OPERATOR_MSG_SIZE = 100 * 1024  # 100K
+MAX_CI_OPERATOR_BLOB_SIZE = 5 * 1024 * 1024
 
-CI_OPERATOR_USING_NAMESPACE_PATTERN = re.compile(r"(Using namespace .*\.(?P<ci_cluster>build\d+)\..*/(?P<ci_namespace>[^/]+))$")
+
+def process_ci_operator_logs_json_path(bucket_name: str, ci_operator_logs_file_path: str) -> [Dict, int]:
+    process_connection_setup(bucket_name)
+    failure = (None, 0)
+
+    # Example path: logs/branch-ci-openshift-cluster-monitoring-operator-master-images/1818971764282101760/artifacts/ci-operator.log
+    # ..../<prowjob_job_name>/<prowjob_build_id>/artifacts/ci-operator.log
+
+    path_components = ci_operator_logs_file_path.rsplit('/', 4)
+    prowjob_job_name = path_components[-4]
+    prowjob_build_id = path_components[-3]
+    prowjob_url = global_bucket_info.bucket_url_prefix + ci_operator_logs_file_path.rsplit('/', 2)[0]
+
+    row_size_estimate = 0
+    try:
+        b = global_result_storage_bucket_client.get_blob(ci_operator_logs_file_path)
+        if not b:
+            return failure
+
+        blob_created_at = b.time_created
+        if b.size < MAX_CI_OPERATOR_BLOB_SIZE:
+            ci_operator_jsonl_str: str = b.download_as_text()
+        else:
+            return failure
+
+        lines = ci_operator_jsonl_str.strip().split('\n')
+        log_entries = [json.loads(line) for line in lines]
+
+        ci_cluster = None
+        ci_namespace = None
+        final_entries = []
+        for entry in log_entries:
+            if 'msg' not in entry or 'level' not in entry:
+                continue
+
+            if entry['level'] in ('debug', 'trace',):
+                continue
+
+            msg: str = entry['msg']
+
+            if msg.startswith('Using namespace '):
+                m = CI_OPERATOR_USING_NAMESPACE_PATTERN.match(msg)
+                if m:
+                    ci_namespace = m.group('ci_namespace')
+                m = CI_OPERATOR_USING_FARM_NAME_PATTERN.match(msg)
+                if m:
+                    ci_cluster = m.group('ci_cluster')
+                if 'build02.vmc' in msg:
+                    ci_cluster = 'vsphere02'
+                if 'l2s4.p1' in msg:
+                    ci_cluster = 'app.ci'
+
+            if len(msg) > MAX_CI_OPERATOR_MSG_SIZE:
+                msg = msg[:(MAX_CI_OPERATOR_MSG_SIZE >> 1)] + "...TRUNCATED..." + msg[-1 * (MAX_CI_OPERATOR_MSG_SIZE >> 1):]
+                entry['msg'] = msg
+
+            entry_as_str = json.dumps(entry)
+            final_entries.append(entry_as_str)  # Bigquery seems to want an array of string for insert_row to work on a REPEATED JSON column
+            row_size_estimate += len(entry_as_str)
+
+        row_size_estimate += 2048  # Add size of other fields once encoded into JSON.
+        new_row = {
+            'created': str(blob_created_at),
+            'prowjob_build_id': prowjob_build_id,
+            'prowjob_job_name': prowjob_job_name,
+            'path': ci_operator_logs_file_path,
+            'file_size': b.size,
+            'ci_cluster': ci_cluster,
+            'ci_namespace': ci_namespace,
+            'entries': final_entries,
+            'prowjob_url': prowjob_url,
+            'schema_level': CI_OPERATOR_LOGS_JSON_SCHEMA_LEVEL,
+        }
+
+        return new_row, row_size_estimate
+
+    except Exception as e:
+        print(f'Failed on {ci_operator_logs_file_path}: {e}')
+        return failure
 
 
 def ci_operator_logs_json_process_queue(input_queue):
-    process_connection_setup('test-platform-results')
+    global global_bq_client
     rows_added = 0  # How many rows this particular worker has added
-
-    table_ref = global_bq_client.dataset('ci_analysis_us').table('ci_operator_logs_json')
-    ci_operator_logs_json_table = global_bq_client.get_table(table_ref)
 
     rows_to_insert = []
     rows_to_insert_size_estimate = 0
+    ci_operator_logs_json_table = None
 
-    for event in iter(input_queue.get, 'STOP'):
-        prowjob_build_id = event['prowjob_build_id']
-        file_path = event['file_path']
+    def insert_available_rows(retries_remaining=3):
+        global global_bq_client
+        nonlocal rows_to_insert
+        nonlocal rows_to_insert_size_estimate
+
+        if not rows_to_insert:
+            return
 
         try:
-            b = global_result_storage_bucket_client.get_blob(file_path)
-            if not b:
-                continue
-
-            blob_created_at = b.time_created
-            if b.size < 1000000:
-                ci_operator_jsonl_str: str = b.download_as_text()
+            errors = global_bq_client.insert_rows(ci_operator_logs_json_table, rows_to_insert, retry=bigquery.DEFAULT_RETRY.with_deadline(30))
+            if errors == []:
+                print(f"Worker {os.getpid()} successfully appended rows: {len(rows_to_insert)}")
             else:
-                continue
+                raise IOError(f"Encountered errors while inserting rows: {errors}")
 
-            lines = ci_operator_jsonl_str.strip().split('\n')
-            log_entries = [json.loads(line) for line in lines]
-
-            ci_cluster = None
-            ci_namespace = None
-            final_entries = []
-            for entry in log_entries:
-                if 'msg' not in entry or 'level' not in entry:
-                    continue
-
-                if entry['level'] in ('debug', 'trace',):
-                    continue
-
-                msg: str = entry['msg']
-
-                if msg.startswith('Using namespace '):
-                    m = CI_OPERATOR_USING_NAMESPACE_PATTERN.match(msg)
-                    if m:
-                        ci_cluster = m.group('ci_cluster')
-                        ci_namespace = m.group('ci_namespace')
-
-                if len(msg) > 1000000:
-                    msg = msg[:50000] + "...TRUNCATED..." + msg[-50000:]
-                    entry['msg'] = msg
-
-                final_entries.append(entry)
-                rows_to_insert_size_estimate += int(len(msg) * 1.10)  # Add 10% escaping overhead
-
-            new_row = {
-                'created': str(blob_created_at),
-                'prowjob_build_id': prowjob_build_id,
-                'path': file_path,
-                'file_size': b.size,
-                'ci_cluster': ci_cluster,
-                'ci_namespace': ci_namespace,
-                'entries': final_entries,
-            }
-            rows_to_insert.append(new_row)
-            rows_to_insert_size_estimate += 2048  # Add size of other fields once encoded into JSON.
-
-            rows_added += 1
-            if rows_added % 100 == 0:
-                print(f'Worker {os.getpid()} has processed {rows_added}')
-
-            if rows_to_insert_size_estimate > 5 * 1024 * 1024:  # Bigquery's insert limit is 10MB, so keep well under that.
-                errors = global_bq_client.insert_rows(ci_operator_logs_json_table, rows_to_insert)
-                if errors == []:
-                    print(f"Worker {os.getpid()} successfully appended rows: {len(rows_to_insert)}")
-                else:
-                    raise IOError("Encountered errors while inserting rows: {}".format(errors))
-
-                rows_to_insert = []
-                rows_to_insert_size_estimate = 0
+            rows_to_insert = []
+            rows_to_insert_size_estimate = 0
 
         except Exception as e:
-            print(f'Failed on {file_path}: {e}')
+            if retries_remaining == 0:
+                raise
+            print(f'Worker {os.getpid()} failed on insert; RESTARTING CLIENT: {e}')
+            global_bq_client = bigquery.Client(project=global_bucket_info.bigquery_project)
+            insert_available_rows(retries_remaining-1)
+
+    for event in iter(input_queue.get, 'STOP'):
+        bucket_name = event['bucket_name']
+        process_connection_setup(bucket_name)  # Note that bucket must be the same for every event in the queue
+        if ci_operator_logs_json_table is None:
+            table_ref = global_bq_client.dataset('ci_analysis_us').table('ci_operator_logs_json')
+            ci_operator_logs_json_table = global_bq_client.get_table(table_ref)
+
+        ci_operator_logs_file_path = event['file_path']
+        new_row, new_row_size_estimate = process_ci_operator_logs_json_path(bucket_name, ci_operator_logs_file_path)
+        if new_row is None:
+            continue
+
+        rows_to_insert.append(new_row)
+        rows_to_insert_size_estimate += new_row_size_estimate
+
+        rows_added += 1
+        if rows_added % 100 == 0:
+            print(f'Worker {os.getpid()} has processed {rows_added}')
+
+        if rows_to_insert_size_estimate > 2 * 1024 * 1024:  # Bigquery's insert limit is 10MB, so keep well under that.
+            insert_available_rows()
+
+    insert_available_rows()
 
 
-def cold_load_ci_operator_logs_json():
-    process_connection_setup('test-platform-results')
+def cold_load_ci_operator_logs_json(bucket_name):
+    process_connection_setup(bucket_name)
 
-    jobs_table_id = 'openshift-gce-devel.ci_analysis_us.jobs'
     query_relevant_storage_paths = f"""
-    SELECT prowjob_build_id, prowjob_url FROM `{jobs_table_id}`
-    # WHERE prowjob_start > DATETIME("2024-08-02")
+    SELECT 
+        DISTINCT(jobs.prowjob_url) AS prowjob_url
+    FROM 
+        # Exclude prowjobs which have their prowjob_build_id already in the ci_operator_logs_json table.
+        `{global_bucket_info.table_id_jobs}` AS jobs
+    WHERE
+        jobs.prowjob_start > DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 6 MONTH)  # GCS only stores back 6 months, so no point going back further.
+        AND
+        jobs.prowjob_build_id NOT IN (
+            SELECT prowjob_build_id
+            FROM `{global_bucket_info.table_id_ci_operator_logs_json}`
+            WHERE schema_level = {CI_OPERATOR_LOGS_JSON_SCHEMA_LEVEL}
+        )
     """
 
     paths = global_bq_client.query(query_relevant_storage_paths)
 
-    queue = multiprocessing.Queue(os.cpu_count() * 1000)
-    workers_per_cpu = 1
+    queue = multiprocessing.Queue(os.cpu_count() * 1000)  # Maximum number of events that can be waiting in the queue at a given time
+    workers_per_cpu = 1  # Number of processes per CPU trying to use the streaming API to bigquery
     worker_pool = [multiprocessing.Process(target=ci_operator_logs_json_process_queue, args=(queue,)) for _ in range(workers_per_cpu * os.cpu_count())]
+    # worker_pool = [multiprocessing.Process(target=ci_operator_logs_json_process_queue, args=(queue,)) for _ in range(1)]  # TESTING ONLY
     for worker in worker_pool:
         worker.start()
 
+    prowjob_url_bucket_prefix = global_bucket_info.bucket_url_prefix
+
     object_count = 0
     for record in paths:
-        prowjob_url = record['prowjob_url']
-        prowjob_build_id = record['prowjob_build_id']
+
+        prowjob_url: str = record['prowjob_url']
         if not prowjob_url:
             continue
 
-        bucket_path_to_job_files = prowjob_url[len(PROWJOB_URL_BUCKET_PREFIX):]  # Turn prowjob url to path in bucket
+        if not prowjob_url.startswith(prowjob_url_bucket_prefix):
+            print(f'Prowjob URL did not start with the expected prefix: {prowjob_url} (expected: {prowjob_url_bucket_prefix}')
+            continue
+
+        prowjob_url = prowjob_url.rstrip('/')  # The convention today is for the URL to not have a trailing slash, but remove, just in case.
+        # Should be a URL like: https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openstack-k8s-operators_openstack-baremetal-operator/192/pull-ci-openstack-k8s-operators-openstack-baremetal-operator-main-precommit-check/1820435531016704000
+        # Notice that the prowjob_job_name is the second to last path element
+        bucket_path_to_job_files = prowjob_url[len(prowjob_url_bucket_prefix):]  # Turn prowjob url to path in bucket; e.g. url => pr-logs/pull/openstack-k8s-operators_openstack-baremetal-operator/192/pull-ci-openstack-k8s-operators-openstack-baremetal-operator-main-precommit-check/1820435531016704000
         bucket_path_to_ci_operator_logs = f'{bucket_path_to_job_files}/artifacts/ci-operator.log'
-        # print(f'Processing {bucket_path_to_ci_operator_logs}')
         event = {
-            'prowjob_build_id': prowjob_build_id,
-            'file_path': bucket_path_to_ci_operator_logs
+            'bucket_name': bucket_name,
+            'file_path': bucket_path_to_ci_operator_logs,
         }
         queue.put(event)
         object_count += 1
         if object_count % 10000 == 0:
             print(f'prowjob records queued so far: {object_count}')
 
-    for worker in worker_pool:
+    for _ in worker_pool:
         queue.put('STOP')
 
     for worker in worker_pool:
@@ -1262,4 +1282,4 @@ if __name__ == '__main__':
     #process_job_intervals_from_gcs_file_path('pr-logs/pull/openshift_cluster-authentication-operator/638/pull-ci-openshift-cluster-authentication-operator-release-4.13-e2e-agnostic-upgrade/1715405306432851968/artifacts/e2e-agnostic-upgrade/openshift-e2e-test/artifacts/junit/e2e-timelines_everything_20231020-173307.json')
     # cold_load_intervals()
 
-    cold_load_ci_operator_logs_json()
+    cold_load_ci_operator_logs_json('test-platform-results')

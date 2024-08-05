@@ -59,7 +59,7 @@ class EventCounter:
         return str(dict(self.data))
 
 
-SCAN_START_DATE = '2024-04-01'
+SCAN_START_DATE = '2024-07-01'
 SCAN_END_DATE = '2024-08-03'
 PROWJOB_URL_BUCKET_PREFIX = 'https://prow.ci.openshift.org/view/gs/test-platform-results/'
 
@@ -118,7 +118,9 @@ if __name__ == '__main__':
     query = bq_client.query(query=f'''
 SELECT created, prowjob_cluster, prowjob_url FROM `openshift-gce-devel.ci_analysis_us.jobs` WHERE 
 prowjob_start BETWEEN DATETIME("{SCAN_START_DATE}") AND DATETIME_ADD("{SCAN_END_DATE}", INTERVAL 1 DAY)
-AND (starts_with(prowjob_job_name, 'branch') or ends_with(prowjob_job_name, '-images'))
+AND (prowjob_job_name LIKE '%nightly%')
+# AND (starts_with(prowjob_job_name, 'branch') or ends_with(prowjob_job_name, '-images'))
+# AND (prowjob_state = "error" OR prowjob_state = "failure") 
 ORDER BY created ASC    
     ''')
     job_records = query.result()
@@ -136,7 +138,8 @@ ORDER BY created ASC
                 url, prowjob_cluster, day, count = result.get()
                 if prowjob_cluster is None:
                     continue
-                urls.write(f'{url}\n')
+                if count > 0:
+                    urls.write(f'{url}\n')
                 ec.add_event(prowjob_cluster, date=day, by=count)
 
     ec.print_total_counts()
