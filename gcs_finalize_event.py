@@ -19,7 +19,7 @@ from collections import defaultdict
 from google.cloud import bigquery, storage
 
 RELEASEINFO_SCHEMA_LEVEL = 2
-CI_OPERATOR_LOGS_JSON_SCHEMA_LEVEL = 15
+CI_OPERATOR_LOGS_JSON_SCHEMA_LEVEL = 17
 JUNIT_TABLE_SCHEMA_LEVEL = 14
 JOB_INTERVALS_SCHEMA_LEVEL = 3
 
@@ -1160,7 +1160,7 @@ def ci_operator_logs_json_process_queue(input_queue):
             return
 
         try:
-            errors = global_bq_client.insert_rows(ci_operator_logs_json_table, rows_to_insert, retry=bigquery.DEFAULT_RETRY.with_deadline(30))
+            errors = global_bq_client.insert_rows_json(ci_operator_logs_json_table, rows_to_insert, retry=bigquery.DEFAULT_RETRY.with_deadline(30))
             if errors == []:
                 print(f"Worker {os.getpid()} successfully appended rows: {len(rows_to_insert)}")
             else:
