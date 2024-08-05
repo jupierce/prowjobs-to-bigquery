@@ -1206,7 +1206,7 @@ def cold_load_ci_operator_logs_json():
     jobs_table_id = 'openshift-gce-devel.ci_analysis_us.jobs'
     query_relevant_storage_paths = f"""
     SELECT prowjob_build_id, prowjob_url FROM `{jobs_table_id}`
-    WHERE prowjob_start > DATETIME("2024-08-02")
+    # WHERE prowjob_start > DATETIME("2024-08-02")
     """
 
     paths = global_bq_client.query(query_relevant_storage_paths)
@@ -1234,7 +1234,7 @@ def cold_load_ci_operator_logs_json():
         queue.put(event)
         object_count += 1
         if object_count % 10000 == 0:
-            print(object_count)
+            print(f'prowjob records queued so far: {object_count}')
 
     for worker in worker_pool:
         queue.put('STOP')
