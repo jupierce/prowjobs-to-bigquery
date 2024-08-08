@@ -8,6 +8,7 @@ import multiprocessing
 import re
 import hashlib
 import traceback
+import time
 from xml import sax
 
 from io import StringIO
@@ -1069,7 +1070,7 @@ MAX_BUILD_LOG_TXT_BLOB_SIZE = 5 * 1024 * 1024
 ANSI_ESCAPE_PATTERN = re.compile(r'\x1b\[[0-9;]*m')
 BINARY_ANSI_ESCAPE_PATTERN = re.compile(rb'\x1b\[[0-9;]*[A-Za-z]')
 
-BUILD_LOG_CI_OPERATOR_LOG_ENTRY_PREFIX = re.compile(rf"(?:{ANSI_ESCAPE_PATTERN.pattern})?(?P<level>INFO|DEBUG|ERROR|WARN)(?:{ANSI_ESCAPE_PATTERN.pattern})?\[(?P<timestamp>[-0-9:TZ]+)\](?:{ANSI_ESCAPE_PATTERN.pattern})?(?P<msg>.*)", re.MULTILINE | re.DOTALL)  # Capturing for decomposing prefix into parts
+BUILD_LOG_CI_OPERATOR_LOG_ENTRY_PREFIX = re.compile(rf"^(?:{ANSI_ESCAPE_PATTERN.pattern})?(?P<level>INFO|DEBUG|ERROR|WARN)(?:{ANSI_ESCAPE_PATTERN.pattern})?\[(?P<timestamp>[-0-9:TZ]+)\](?:{ANSI_ESCAPE_PATTERN.pattern})? ")  # Capturing for decomposing prefix into parts
 
 # If we are not given a ci-operator log, then this regex is used to
 # determine whether we include the build-log.txt line or not. This is
@@ -1086,7 +1087,27 @@ INTERESTING_BUILD_LOG = re.compile(
 )
 
 
-def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str) -> [Dict, int]:
+class ExecutionTimer:
+
+    def __init__(self, timer_name: str, timers: Optional[Dict[str, int]]):
+        self.start_time = 0
+        self.timer_name = timer_name
+        self.timers = timers
+
+    def __enter__(self):
+        self.start_time = time.time_ns()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        end_time = time.time_ns()
+        elapsed_time = end_time - self.start_time
+        if self.timers is not None:
+            if self.timer_name not in self.timers:
+                self.timers[self.timer_name] = 0
+            self.timers[self.timer_name] += elapsed_time
+
+
+def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers: Optional[Dict[str, float]] = None) -> [Dict, int]:
     process_connection_setup(bucket_name)
     empty_result = (None, 0)
 
@@ -1100,28 +1121,36 @@ def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str) -> [Di
 
     row_size_estimate = 0
     try:
+
         b = global_result_storage_bucket_client.get_blob(build_log_txt_path)
         if not b:
             return empty_result
 
         blob_created_at = b.time_created
         if b.size < MAX_BUILD_LOG_TXT_BLOB_SIZE:
-            build_log_txt_content: str = b.download_as_text()
+            with ExecutionTimer('download', timers):
+                build_log_txt_content: str = b.download_as_text()
         else:
             return empty_result
 
-        split_results = build_log_txt_content.splitlines(keepends=True)
+        with ExecutionTimer('splitlines', timers):
+            split_results = build_log_txt_content.splitlines(keepends=True)
+
         in_ci_operator_entry = None
 
         log_entries = []
         for result in split_results:
-            match = BUILD_LOG_CI_OPERATOR_LOG_ENTRY_PREFIX.match(result)
+            with ExecutionTimer('ci_operator_log_match', timers):
+                match = BUILD_LOG_CI_OPERATOR_LOG_ENTRY_PREFIX.match(result)
             if match:
                 if in_ci_operator_entry:
-                    log_entries.append(in_ci_operator_entry)
+                    with ExecutionTimer('log_entries_append', timers):
+                        in_ci_operator_entry['msg'] = ''.join(in_ci_operator_entry['msg'])  # Flatten the list before inserting
+                        log_entries.append(in_ci_operator_entry)
+
                 level = match.group('level').lower()
                 timestamp = match.group('timestamp')
-                msg = match.group('msg')
+                msg = result[match.end():]
                 if level in ["trace", "debug"]:
                     continue
                 dt = datetime.datetime.fromisoformat(timestamp.rstrip('Z'))
@@ -1129,54 +1158,62 @@ def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str) -> [Di
                 in_ci_operator_entry = {
                     'level': level,
                     'time': str(dt),
-                    'msg': msg,
+                    'msg': [msg],  # To prevent a large number of slow appends, just keep msgs in a list and ''.join at the end.
                 }
             else:
                 if in_ci_operator_entry:
-                    in_ci_operator_entry['msg'] += result
+                    with ExecutionTimer('msg_add', timers):
+                        in_ci_operator_entry['msg'].append(result)
                 else:
-                    if not INTERESTING_BUILD_LOG.match(result):
-                        continue
-                    log_entries.append({
-                        'level': "info",
-                        'time': str(b.time_created),
-                        'msg': result,
-                    })
+                    with ExecutionTimer('interesting_match', timers):
+                        if not INTERESTING_BUILD_LOG.match(result[:50]):
+                            continue
+
+                    with ExecutionTimer('log_entries_append', timers):
+                        log_entries.append({
+                            'level': "info",
+                            'time': str(b.time_created),
+                            'msg': result,
+                        })
 
         if in_ci_operator_entry:
-            log_entries.append(in_ci_operator_entry)
+            with ExecutionTimer('log_entries_append', timers):
+                in_ci_operator_entry['msg'] = ''.join(in_ci_operator_entry['msg'])  # Flatten the list before inserting
+                log_entries.append(in_ci_operator_entry)
 
         if not log_entries:
             return empty_result
 
-        ci_cluster = None
-        ci_namespace = None
-        final_entries = []
-        for entry in log_entries:
-            if 'msg' not in entry or 'level' not in entry:
-                continue
+        with ExecutionTimer('log_entries_scan', timers):
+            ci_cluster = None
+            ci_namespace = None
+            final_entries = []
+            for entry in log_entries:
+                if 'msg' not in entry or 'level' not in entry:
+                    continue
 
-            msg: str = entry['msg']
+                msg: str = entry['msg']
 
-            if msg.startswith('Using namespace '):
-                m = CI_OPERATOR_USING_NAMESPACE_PATTERN.match(msg)
-                if m:
-                    ci_namespace = m.group('ci_namespace')
-                m = CI_OPERATOR_USING_FARM_NAME_PATTERN.match(msg)
-                if m:
-                    ci_cluster = m.group('ci_cluster')
-                if 'build02.vmc' in msg:
-                    ci_cluster = 'vsphere02'
-                if 'l2s4.p1' in msg:
-                    ci_cluster = 'app.ci'
+                if msg.startswith('Using namespace '):
+                    m = CI_OPERATOR_USING_NAMESPACE_PATTERN.match(msg)
+                    if m:
+                        ci_namespace = m.group('ci_namespace')
+                    m = CI_OPERATOR_USING_FARM_NAME_PATTERN.match(msg)
+                    if m:
+                        ci_cluster = m.group('ci_cluster')
+                    if 'build02.vmc' in msg:
+                        ci_cluster = 'vsphere02'
+                    if 'l2s4.p1' in msg:
+                        ci_cluster = 'app.ci'
 
-            if len(msg) > MAX_CI_OPERATOR_MSG_SIZE:
-                msg = msg[:(MAX_CI_OPERATOR_MSG_SIZE >> 1)] + "...TRUNCATED..." + msg[-1 * (MAX_CI_OPERATOR_MSG_SIZE >> 1):]
-                entry['msg'] = msg
+                if len(msg) > MAX_CI_OPERATOR_MSG_SIZE:
+                    with ExecutionTimer('truncation', timers):
+                        msg = msg[:(MAX_CI_OPERATOR_MSG_SIZE >> 1)] + "...TRUNCATED..." + msg[-1 * (MAX_CI_OPERATOR_MSG_SIZE >> 1):]
+                        entry['msg'] = msg
 
-            entry_as_str = json.dumps(entry)
-            final_entries.append(entry)
-            row_size_estimate += len(entry_as_str)
+                entry_as_str = json.dumps(entry)
+                final_entries.append(entry)
+                row_size_estimate += len(entry_as_str)
 
         row_size_estimate += 2048  # Add size of other fields once encoded into JSON.
         new_row = {
@@ -1209,6 +1246,7 @@ def build_log_txt_process_queue(input_queue):
     rows_to_insert = []
     rows_to_insert_size_estimate = 0
     ci_operator_logs_json_table = None
+    timers: Dict[str, int] = dict()
 
     def insert_available_rows(retries_remaining=3):
         global global_bq_client
@@ -1219,11 +1257,15 @@ def build_log_txt_process_queue(input_queue):
             return
 
         try:
-            errors = global_bq_client.insert_rows_json(ci_operator_logs_json_table, rows_to_insert, retry=bigquery.DEFAULT_RETRY.with_deadline(30))
-            if errors == []:
-                print(f"Worker {os.getpid()} successfully appended rows: {len(rows_to_insert)}")
-            else:
-                raise IOError(f"Encountered errors while inserting rows: {errors}")
+            with ExecutionTimer('insert_rows_json', timers):
+                errors = global_bq_client.insert_rows_json(ci_operator_logs_json_table, rows_to_insert, retry=bigquery.DEFAULT_RETRY.with_deadline(30))
+                if errors != []:
+                    raise IOError(f"Encountered errors while inserting rows: {errors}")
+
+            print(f"Worker {os.getpid()} successfully appended rows: {len(rows_to_insert)}")
+            for key, value in timers.items():
+                seconds = value / 1_000_000_000  # Convert to seconds
+                print(f"    {os.getpid()}  {key}: {seconds:.3f} seconds")
 
             rows_to_insert = []
             rows_to_insert_size_estimate = 0
@@ -1243,7 +1285,7 @@ def build_log_txt_process_queue(input_queue):
             ci_operator_logs_json_table = global_bq_client.get_table(table_ref)
 
         build_log_txt_file_path = event['file_path']
-        new_row, new_row_size_estimate = process_build_log_txt_path(bucket_name, build_log_txt_file_path)
+        new_row, new_row_size_estimate = process_build_log_txt_path(bucket_name, build_log_txt_file_path, timers=timers)
         if new_row is None:
             continue
 
