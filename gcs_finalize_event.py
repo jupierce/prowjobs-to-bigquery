@@ -279,6 +279,9 @@ test_id_pattern = re.compile(r"^.*{([a-f0-9]+)}.*$")
 # Group 3 extracts the prowjob numeric id (requires id be at least 12 digits to avoid finding PR number)
 prowjob_path_pattern = re.compile(r"^(.*?\/([^\/]+)\/(\d{12,}))\/.*$")
 
+# prowjob build ids should be at least 12 digits
+prowjob_build_id_pattern = re.compile(r"^\d{12,}$")
+
 # extracts the first ocp version like '4.11' (in group 1) or 'master' or 'main' (in group 2)
 branch_pattern = re.compile(r".*?\D+[-\/](\d\.\d+)\D?.*|.*\-(master|main)\-.*")
 
@@ -1117,6 +1120,10 @@ def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers
     path_components = build_log_txt_path.rsplit('/', 4)
     prowjob_job_name = path_components[-3]
     prowjob_build_id = path_components[-2]
+
+    if not prowjob_build_id_pattern.match(prowjob_build_id):  # This doesn't appear to be a build-log in the root of a prowjob.
+        return empty_result
+
     prowjob_url = global_bucket_info.bucket_url_prefix + build_log_txt_path.rsplit('/', 1)[0]
 
     row_size_estimate = 0
