@@ -20,7 +20,7 @@ from collections import defaultdict
 from google.cloud import bigquery, storage
 
 RELEASEINFO_SCHEMA_LEVEL = 2
-CI_OPERATOR_LOGS_JSON_SCHEMA_LEVEL = 20
+CI_OPERATOR_LOGS_JSON_SCHEMA_LEVEL = 21
 JUNIT_TABLE_SCHEMA_LEVEL = 14
 JOB_INTERVALS_SCHEMA_LEVEL = 3
 
@@ -1199,7 +1199,7 @@ def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers
                 if 'msg' not in entry or 'level' not in entry:
                     continue
 
-                msg: str = entry['msg']
+                msg: str = entry['msg'].lstrip()
 
                 if msg.startswith('Using namespace '):
                     m = CI_OPERATOR_USING_NAMESPACE_PATTERN.match(msg)
