@@ -20,7 +20,7 @@ from collections import defaultdict
 from google.cloud import bigquery, storage
 
 RELEASEINFO_SCHEMA_LEVEL = 2
-CI_OPERATOR_LOGS_JSON_SCHEMA_LEVEL = 21
+CI_OPERATOR_LOGS_JSON_SCHEMA_LEVEL = 20
 JUNIT_TABLE_SCHEMA_LEVEL = 14
 JOB_INTERVALS_SCHEMA_LEVEL = 3
 
