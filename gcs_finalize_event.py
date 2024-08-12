@@ -1126,6 +1126,21 @@ def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers
 
     prowjob_url = global_bucket_info.bucket_url_prefix + build_log_txt_path.rsplit('/', 1)[0]
 
+    prowjob_state = None
+    ci_namespace = None
+    try:
+        finished_json_path = build_log_txt_path.rsplit('/', 1)[0] + '/' + 'finished.json'
+        fj = global_result_storage_bucket_client.get_blob(finished_json_path)
+        if fj:
+            finished_json_content: str = fj.download_as_text()
+            finished = json.loads(finished_json_content)
+            prowjob_state = finished['result']
+            if 'metadata' in finished:
+                # Not all finished.json have metadata.
+                ci_namespace = finished['metadata']['work-namespace']
+    except Exception as e:
+        print(f'Failed to load finished.json {prowjob_url}: {e}')
+
     row_size_estimate = 0
     try:
 
@@ -1193,7 +1208,6 @@ def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers
 
         with ExecutionTimer('log_entries_scan', timers):
             ci_cluster = None
-            ci_namespace = None
             final_entries = []
             for entry in log_entries:
                 if 'msg' not in entry or 'level' not in entry:
@@ -1203,8 +1217,10 @@ def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers
 
                 if msg.startswith('Using namespace '):
                     m = CI_OPERATOR_USING_NAMESPACE_PATTERN.match(msg)
-                    if m:
+                    if ci_namespace is None and m:
+                        # If finished.json did not give us ci_namespace
                         ci_namespace = m.group('ci_namespace')
+
                     m = CI_OPERATOR_USING_FARM_NAME_PATTERN.match(msg)
                     if m:
                         ci_cluster = m.group('ci_cluster')
@@ -1234,6 +1250,7 @@ def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers
             'logs': final_entries,
             'prowjob_url': prowjob_url,
             'schema_level': CI_OPERATOR_LOGS_JSON_SCHEMA_LEVEL,
+            'prowjob_state': prowjob_state,
         }
 
         return new_row, row_size_estimate
