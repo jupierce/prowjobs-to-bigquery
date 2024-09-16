@@ -98,7 +98,7 @@ BUCKET_INFO_MAPPING = {
         bucket_project='openshift-ci-private',
         bucket_url_prefix='https://qe-private-deck-ci.apps.ci.l2s4.p1.openshiftapps.com/view/gs/qe-private-deck/',
         bigquery_project='openshift-gce-devel',
-        dest_bigquery_dataset='openshift-gce-devel.qe_testing',
+        dest_bigquery_dataset='openshift-gce-devel.ci_analysis_qe',
         **DEFAULT_TABLE_NAMES
     ),
     'origin-ci-private': BucketInfo(
