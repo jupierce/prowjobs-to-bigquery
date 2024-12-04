@@ -951,7 +951,9 @@ def gcs_finalize(event, context):
     if gcs_file_name.endswith("/prowjob.json"):
         process_connection_setup(bucket=bucket)
         process_prowjob_from_gcs(gcs_file_name)
-    elif gcs_file_name.endswith('/finished.json'):
+    elif gcs_file_name.endswith('/finished.json') or gcs_file_name.endswith('/build-log.txt'):
+        # there does not seem to be a guarantee on which file is written last. This
+        # may lead to duplicates, but that is better than missing data.
         process_connection_setup(bucket=bucket)
         file_path = pathlib.Path(gcs_file_name)
         ci_operator_log_path = file_path.parent.joinpath('build-log.txt')
@@ -1353,7 +1355,7 @@ def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers
     prowjob_job_name = path_components[-3]
     prowjob_build_id = path_components[-2]
 
-    if not prowjob_build_id_pattern.match(prowjob_build_id):  # This doesn't appear to be a build-log in the root of a prowjob.
+    if not prowjob_build_id_pattern.match(prowjob_build_id):  # This doesn't appear to be a build-log.txt in the root of a prowjob.
         return empty_result
 
     prowjob_url = global_bucket_info.bucket_url_prefix + build_log_txt_path.rsplit('/', 1)[0]
@@ -1370,6 +1372,9 @@ def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers
             if 'metadata' in finished and 'work-namespace' in finished['metadata']:
                 # Not all finished.json have metadata.
                 ci_namespace = finished['metadata']['work-namespace']
+        else:
+            print(f'finished.json does not exist yet; skipping build-log.txt for now')
+            return empty_result
     except Exception as e:
         print(f'Failed to load finished.json {prowjob_url}: {e}')
 
