@@ -981,9 +981,9 @@ def gcs_finalize(event, context):
     elif gcs_file_name.endswith('/releaseinfo.json'):
         process_connection_setup(bucket=bucket)
         process_releaseinfo_from_gcs_file_path(gcs_file_name)
-    elif 'e2e-timelines_everything_' in gcs_file_name and gcs_file_name.endswith('.json'):
-        process_connection_setup(bucket=bucket)
-        process_job_intervals_from_gcs_file_path(gcs_file_name)
+    #elif 'e2e-timelines_everything_' in gcs_file_name and gcs_file_name.endswith('.json'):
+    #    process_connection_setup(bucket=bucket)
+    #    process_job_intervals_from_gcs_file_path(gcs_file_name)
 
 
 def qe_process_queue(input_queue):
