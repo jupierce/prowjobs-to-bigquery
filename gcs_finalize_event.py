@@ -23,6 +23,7 @@ RELEASEINFO_SCHEMA_LEVEL = 2
 CI_OPERATOR_LOGS_JSON_SCHEMA_LEVEL = 20
 JUNIT_TABLE_SCHEMA_LEVEL = 14
 JOB_INTERVALS_SCHEMA_LEVEL = 3
+TEMP_CI_OPERATOR_SCHEMA_LEVEL = 3
 
 
 class BucketInfo(NamedTuple):
@@ -1110,6 +1111,237 @@ class ExecutionTimer:
             self.timers[self.timer_name] += elapsed_time
 
 
+
+_nanosecond_size  = 1
+_microsecond_size = 1000 * _nanosecond_size
+_millisecond_size = 1000 * _microsecond_size
+_second_size      = 1000 * _millisecond_size
+_minute_size      = 60   * _second_size
+_hour_size        = 60   * _minute_size
+_day_size         = 24   * _hour_size
+_week_size        = 7    * _day_size
+_month_size       = 30   * _day_size
+_year_size        = 365  * _day_size
+
+units = {
+    "ns": _nanosecond_size,
+    "us": _microsecond_size,
+    "µs": _microsecond_size,
+    "μs": _microsecond_size,
+    "ms": _millisecond_size,
+    "s":  _second_size,
+    "m":  _minute_size,
+    "h":  _hour_size,
+    "d":  _day_size,
+    "w":  _week_size,
+    "mm": _month_size,
+    "y":  _year_size,
+}
+
+_duration_re = re.compile(r'([\d\.]+)([a-zµμ]+)')
+
+
+class DurationError(ValueError):
+    """duration error"""
+
+
+def from_str(duration):
+    """Parse a duration string to a datetime.timedelta"""
+
+    original = duration
+
+    if duration in ("0", "+0", "-0"):
+        return datetime.timedelta()
+
+    sign = 1
+    if duration and duration[0] in '+-':
+        if duration[0] == '-':
+            sign = -1
+        duration = duration[1:]
+
+    matches = list(_duration_re.finditer(duration))
+    if not matches:
+        raise DurationError("Invalid duration {}".format(original))
+    if matches[0].start() != 0 or matches[-1].end() != len(duration):
+        raise DurationError(
+            'Extra chars at start or end of duration {}'.format(original))
+
+    total = 0
+    for match in matches:
+        value, unit = match.groups()
+        if unit not in units:
+            raise DurationError(
+                "Unknown unit {} in duration {}".format(unit, original))
+        try:
+            total += float(value) * units[unit]
+        except Exception:
+            raise DurationError(
+                "Invalid value {} in duration {}".format(value, original))
+
+    microseconds = total / _microsecond_size
+    return datetime.timedelta(microseconds=sign * microseconds)
+
+
+def to_str(delta, extended=False):
+    """Format a datetime.timedelta to a duration string"""
+
+    total_seconds = delta.total_seconds()
+    sign = "-" if total_seconds < 0 else ""
+    nanoseconds = round(abs(total_seconds * _second_size), 0)
+
+    if abs(total_seconds) < 1:
+        result_str = _to_str_small(nanoseconds, extended)
+    else:
+        result_str = _to_str_large(nanoseconds, extended)
+
+    return "{}{}".format(sign, result_str)
+
+
+def _to_str_small(nanoseconds, extended):
+
+    result_str = ""
+
+    if not nanoseconds:
+        return "0"
+
+    milliseconds = int(nanoseconds / _millisecond_size)
+    if milliseconds:
+        nanoseconds -= _millisecond_size * milliseconds
+        result_str += "{:g}ms".format(milliseconds)
+
+    microseconds = int(nanoseconds / _microsecond_size)
+    if microseconds:
+        nanoseconds -= _microsecond_size * microseconds
+        result_str += "{:g}us".format(microseconds)
+
+    if nanoseconds:
+        result_str += "{:g}ns".format(nanoseconds)
+
+    return result_str
+
+
+def _to_str_large(nanoseconds, extended):
+
+    result_str = ""
+
+    if extended:
+
+        years = int(nanoseconds / _year_size)
+        if years:
+            nanoseconds -= _year_size * years
+            result_str += "{:g}y".format(years)
+
+        months = int(nanoseconds / _month_size)
+        if months:
+            nanoseconds -= _month_size * months
+            result_str += "{:g}mm".format(months)
+
+        days = int(nanoseconds / _day_size)
+        if days:
+            nanoseconds -= _day_size * days
+            result_str += "{:g}d".format(days)
+
+    hours = int(nanoseconds / _hour_size)
+    if hours:
+        nanoseconds -= _hour_size * hours
+        result_str += "{:g}h".format(hours)
+
+    minutes = int(nanoseconds / _minute_size)
+    if minutes:
+        nanoseconds -= _minute_size * minutes
+        result_str += "{:g}m".format(minutes)
+
+    seconds = float(nanoseconds) / float(_second_size)
+    if seconds:
+        nanoseconds -= _second_size * seconds
+        result_str += "{:g}s".format(seconds)
+
+    return result_str
+
+
+def extract_and_convert_to_ms(multiline_string):
+    # Search for the line that contains the time duration
+    pattern = re.compile(r"Spent ([.0-9mhds]+) waiting for image pull secrets")
+    match = pattern.search(multiline_string)
+
+    if match:
+        # Extract the time duration
+        duration_str = match.group(1)
+        # Convert the duration to milliseconds
+        return int(from_str(duration_str).total_seconds() * 1000)
+    else:
+        return None
+
+
+def process_ci_operator_log_path_pull_secret_load_time(bucket_name: str, ci_operator_log_path: str, timers: Optional[Dict[str, float]] = None) -> [Dict, int]:
+    process_connection_setup(bucket_name)
+    empty_result = (None, 0)
+
+    # Example path: logs/branch-ci-openshift-cluster-monitoring-operator-master-images/1818971764282101760/build-log.txt
+    # ..../<prowjob_job_name>/<prowjob_build_id>/artifacts/ci-operator.log
+
+    path_components = ci_operator_log_path.rsplit('/', 4)
+    prowjob_job_name = path_components[-4]
+    prowjob_build_id = path_components[-3]
+
+    if not prowjob_build_id_pattern.match(prowjob_build_id):  # This doesn't appear to be a build-log in the root of a prowjob.
+        return empty_result
+
+    prowjob_url = global_bucket_info.bucket_url_prefix + ci_operator_log_path.rsplit('/', 2)[0]
+
+    prowjob_state = None
+    try:
+        finished_json_path = ci_operator_log_path.rsplit('/', 1)[0] + '/' + 'finished.json'
+        fj = global_result_storage_bucket_client.get_blob(finished_json_path)
+        if fj:
+            finished_json_content: str = fj.download_as_text()
+            finished = json.loads(finished_json_content)
+            prowjob_state = finished['result']
+            if 'metadata' in finished:
+                # Not all finished.json have metadata.
+                ci_namespace = finished['metadata']['work-namespace']
+    except Exception as e:
+        print(f'Failed to load finished.json {prowjob_url}: {e}')
+
+    row_size_estimate = 0
+    try:
+
+        b = global_result_storage_bucket_client.get_blob(ci_operator_log_path)
+        if not b:
+            return empty_result
+
+        blob_created_at = b.time_created
+        if b.size < MAX_BUILD_LOG_TXT_BLOB_SIZE:
+            with ExecutionTimer('download', timers):
+                ci_operator_log_json: str = b.download_as_text()
+        else:
+            return empty_result
+
+        time_spent_ms = extract_and_convert_to_ms(ci_operator_log_json)
+        if time_spent_ms is None:
+            print(f'Unable to find time spent in {ci_operator_log_path}')
+            return empty_result
+
+        new_row = {
+            'created': str(blob_created_at),
+            'prowjob_build_id': prowjob_build_id,
+            'prowjob_job_name': prowjob_job_name,
+            'path': ci_operator_log_path,
+            'file_size': b.size,
+            'duration': time_spent_ms,
+            'prowjob_url': prowjob_url,
+            'schema_level': TEMP_CI_OPERATOR_SCHEMA_LEVEL,
+            'prowjob_state': prowjob_state,
+        }
+        row_size_estimate += 1000
+
+        return new_row, row_size_estimate
+
+    except Exception as e:
+        print(f'Failed on {ci_operator_log_path}: {e}')
+        return empty_result
+
+
 def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers: Optional[Dict[str, float]] = None) -> [Dict, int]:
     process_connection_setup(bucket_name)
     empty_result = (None, 0)
@@ -1135,7 +1367,7 @@ def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers
             finished_json_content: str = fj.download_as_text()
             finished = json.loads(finished_json_content)
             prowjob_state = finished['result']
-            if 'metadata' in finished:
+            if 'metadata' in finished and 'work-namespace' in finished['metadata']:
                 # Not all finished.json have metadata.
                 ci_namespace = finished['metadata']['work-namespace']
     except Exception as e:
@@ -1332,7 +1564,7 @@ def cold_load_build_log_txt(bucket_name):
 
     query_relevant_storage_paths = f"""
     SELECT 
-        DISTINCT(jobs.prowjob_url) AS prowjob_url
+        DISTINCT created, jobs.prowjob_url AS prowjob_url
     FROM 
         # Exclude prowjobs which have their prowjob_build_id already in the ci_operator_logs_json table.
         `{global_bucket_info.table_id_jobs}` AS jobs
@@ -1344,6 +1576,7 @@ def cold_load_build_log_txt(bucket_name):
             FROM `{global_bucket_info.table_id_ci_operator_logs_json}`
             WHERE schema_level = {CI_OPERATOR_LOGS_JSON_SCHEMA_LEVEL}
         )
+    ORDER BY jobs.created DESC
     """
 
     prowjob_urls = global_bq_client.query(query_relevant_storage_paths)
@@ -1356,7 +1589,7 @@ def cold_load_build_log_txt(bucket_name):
     # ]
 
     queue = multiprocessing.Queue(os.cpu_count() * 1000)  # Maximum number of events that can be waiting in the queue at a given time
-    workers_per_cpu = 1  # Number of processes per CPU trying to use the streaming API to bigquery
+    workers_per_cpu = 3  # Number of processes per CPU trying to use the streaming API to bigquery
     worker_pool = [multiprocessing.Process(target=build_log_txt_process_queue, args=(queue,)) for _ in range(workers_per_cpu * os.cpu_count())]
     # worker_pool = [multiprocessing.Process(target=build_log_txt_process_queue, args=(queue,)) for _ in range(1)]  # TESTING ONLY
     for worker in worker_pool:
@@ -1396,6 +1629,149 @@ def cold_load_build_log_txt(bucket_name):
         worker.join()
 
 
+def ci_operator_load_time_process_queue(input_queue):
+    global global_bq_client
+    rows_added = 0  # How many rows this particular worker has added
+
+    rows_to_insert = []
+    rows_to_insert_size_estimate = 0
+    temp_ci_operator_load_time_table = None
+    timers: Dict[str, int] = dict()
+
+    def insert_available_rows(retries_remaining=3):
+        global global_bq_client
+        nonlocal rows_to_insert
+        nonlocal rows_to_insert_size_estimate
+
+        if not rows_to_insert:
+            return
+
+        try:
+            with ExecutionTimer('insert_rows_json', timers):
+                errors = global_bq_client.insert_rows_json(temp_ci_operator_load_time_table, rows_to_insert, retry=bigquery.DEFAULT_RETRY.with_deadline(30))
+                if errors != []:
+                    raise IOError(f"Encountered errors while inserting rows: {errors}")
+
+            print(f"Worker {os.getpid()} successfully appended rows: {len(rows_to_insert)}")
+            for key, value in timers.items():
+                seconds = value / 1_000_000_000  # Convert to seconds
+                print(f"    {os.getpid()}  {key}: {seconds:.3f} seconds")
+
+            rows_to_insert = []
+            rows_to_insert_size_estimate = 0
+
+        except Exception as e:
+            if retries_remaining == 0:
+                raise
+            print(f'Worker {os.getpid()} failed on insert; RESTARTING CLIENT: {e}')
+            global_bq_client = bigquery.Client(project=global_bucket_info.bigquery_project)
+            insert_available_rows(retries_remaining-1)
+
+    for event in iter(input_queue.get, 'STOP'):
+        bucket_name = event['bucket_name']
+        process_connection_setup(bucket_name)  # Note that bucket must be the same for every event in the queue
+        if temp_ci_operator_load_time_table is None:
+            table_ref = global_bq_client.dataset('ci_analysis_us').table('temp_ci_operator_load_time')
+            temp_ci_operator_load_time_table = global_bq_client.get_table(table_ref)
+
+        ci_operator_log_path = event['file_path']
+        new_row, new_row_size_estimate = process_ci_operator_log_path_pull_secret_load_time(bucket_name, ci_operator_log_path, timers=timers)
+        if new_row is None:
+            continue
+
+        if rows_to_insert_size_estimate > 0 and rows_to_insert_size_estimate + new_row_size_estimate > INSERT_PAYLOAD_SIZE_LIMIT:
+            # Insert old rows before appending new ones to stay under 10MB bigquery insert limit
+            insert_available_rows()
+
+        rows_to_insert.append(new_row)
+        rows_to_insert_size_estimate += new_row_size_estimate
+
+        rows_added += 1
+        if rows_added % 100 == 0:
+            print(f'Worker {os.getpid()} has processed {rows_added}')
+
+    insert_available_rows()
+
+
+def analyze_ci_operator_pull_secret_load_time(bucket_name):
+    process_connection_setup(bucket_name)
+
+    query_relevant_storage_paths = f"""
+    SELECT 
+        DISTINCT(jobs.prowjob_url) AS prowjob_url
+    FROM 
+        # Exclude prowjobs which have their prowjob_build_id already in the ci_operator_logs_json table.
+        `{global_bucket_info.table_id_jobs}` AS jobs
+    WHERE
+        jobs.prowjob_start > DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 6 MONTH)  # GCS only stores back 6 months, so no point going back further.
+        AND
+        jobs.prowjob_build_id NOT IN (
+            SELECT prowjob_build_id
+            FROM openshift-gce-devel.ci_analysis_us.temp_ci_operator_load_time
+            WHERE schema_level = {TEMP_CI_OPERATOR_SCHEMA_LEVEL}
+        )
+    """
+
+    # Enable processing a small number of jobs
+    debug_mode = True
+
+    prowjob_urls = global_bq_client.query(query_relevant_storage_paths)
+
+    if debug_mode:
+        prowjob_urls = [
+            {
+                'prowjob_url': 'https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-openshift-microshift-release-4.16-ocp-conformance-rhel-eus-nightly-arm/1828412150050197504',
+            },
+            {
+                'prowjob_url': 'https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/stackrox_stackrox/11537/pull-ci-stackrox-stackrox-master-ocp-4-12-ui-e2e-tests/1801701408743886848'
+            }
+        ]
+
+    queue = multiprocessing.Queue(os.cpu_count() * 1000)  # Maximum number of events that can be waiting in the queue at a given time
+    workers_per_cpu = 1  # Number of processes per CPU trying to use the streaming API to bigquery
+
+    if debug_mode:
+        worker_pool = [multiprocessing.Process(target=ci_operator_load_time_process_queue, args=(queue,)) for _ in range(1)]  # TESTING ONLY
+    else:
+        worker_pool = [multiprocessing.Process(target=ci_operator_load_time_process_queue, args=(queue,)) for _ in range(workers_per_cpu * os.cpu_count())]
+
+    for worker in worker_pool:
+        worker.start()
+
+    prowjob_url_bucket_prefix = global_bucket_info.bucket_url_prefix
+
+    object_count = 0
+    for record in prowjob_urls:
+
+        prowjob_url: str = record['prowjob_url']
+        if not prowjob_url:
+            continue
+
+        if not prowjob_url.startswith(prowjob_url_bucket_prefix):
+            print(f'Prowjob URL did not start with the expected prefix: {prowjob_url} (expected: {prowjob_url_bucket_prefix}')
+            continue
+
+        prowjob_url = prowjob_url.rstrip('/')  # The convention today is for the URL to not have a trailing slash, but remove, just in case.
+        # Should be a URL like: https://prow.ci.openshift.org/view/gs/test-platform-results/pr-logs/pull/openstack-k8s-operators_openstack-baremetal-operator/192/pull-ci-openstack-k8s-operators-openstack-baremetal-operator-main-precommit-check/1820435531016704000
+        # Notice that the prowjob_job_name is the second to last path element
+        bucket_path_to_job_files = prowjob_url[len(prowjob_url_bucket_prefix):]  # Turn prowjob url to path in bucket; e.g. url => pr-logs/pull/openstack-k8s-operators_openstack-baremetal-operator/192/pull-ci-openstack-k8s-operators-openstack-baremetal-operator-main-precommit-check/1820435531016704000
+        ci_operator_logs_path = f'{bucket_path_to_job_files}/artifacts/ci-operator.log'
+        event = {
+            'bucket_name': bucket_name,
+            'file_path': ci_operator_logs_path,
+        }
+        queue.put(event)
+        object_count += 1
+        if object_count % 10000 == 0:
+            print(f'prowjob records queued so far: {object_count}')
+
+    for _ in worker_pool:
+        queue.put('STOP')
+
+    for worker in worker_pool:
+        worker.join()
+
+
 if __name__ == '__main__':
     # outcome = parse_ci_operator_graph_resources_json('abcdefg', pathlib.Path("ci-operator-graphs/ci-operator-step-graph-1.json").read_text())
     # import yaml
@@ -1405,7 +1781,7 @@ if __name__ == '__main__':
     #process_connection_setup()
     #parse_junit_from_gcs_file_path('logs/periodic-ci-openshift-release-master-ci-4.14-e2e-gcp-sdn/1640905778267164672/artifacts/e2e-gcp-sdn/openshift-e2e-test/artifacts/junit/junit_e2e__20230329-031207.xml')
 
-    #cold_load_all_ci_operator_logs()
+    cold_load_build_log_txt('test-platform-results')
 
     #process_releaseinfo_from_gcs_file_path('pr-logs/pull/openshift_release/40864/rehearse-40864-pull-ci-openshift-cluster-api-release-4.11-e2e-aws/1675182964247367680/artifacts/e2e-aws/gather-extra/artifacts/releaseinfo.json')
     #cold_load_junit()
@@ -1415,4 +1791,4 @@ if __name__ == '__main__':
     #process_job_intervals_from_gcs_file_path('pr-logs/pull/openshift_cluster-authentication-operator/638/pull-ci-openshift-cluster-authentication-operator-release-4.13-e2e-agnostic-upgrade/1715405306432851968/artifacts/e2e-agnostic-upgrade/openshift-e2e-test/artifacts/junit/e2e-timelines_everything_20231020-173307.json')
     # cold_load_intervals()
 
-    cold_load_build_log_txt('test-platform-results')
+    # analyze_ci_operator_pull_secret_load_time('test-platform-results')
