@@ -177,6 +177,8 @@ class JobsRecord(NamedTuple):
     release_verify_tag: str
     prpq: str
     manager: str
+    ci_executor: str
+    ci_user: str
     schema_level: int
     retest: str
 
@@ -722,6 +724,8 @@ def parse_prowjob_json(prowjob_json_text):
         features=features_list,
         prpq=or_none(labels['pullrequestpayloadqualificationruns.ci.openshift.io']),
         manager=manager,
+        ci_executor=or_none(annotations['ci.openshift.io/executor']),
+        ci_user=or_none(annotations['ci.openshift.io/user']),
         schema_level=10,
         retest=or_none(labels['prow.k8s.io/retest']),
     )
