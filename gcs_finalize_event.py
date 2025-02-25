@@ -181,6 +181,7 @@ class JobsRecord(NamedTuple):
     ci_user: str
     schema_level: int
     retest: str
+    gcs_bucket: str
 
 
 class JobReleaseRecord(NamedTuple):
@@ -638,7 +639,7 @@ def parse_junit_xml(junit_xml_text, modified_time: str, prowjob_name: str, prowj
     return handler.record_dicts
 
 
-def parse_prowjob_json(prowjob_json_text):
+def parse_prowjob_json(prowjob_json_text, bkt):
     try:
         prowjob_dict = json.loads(prowjob_json_text)
     except:
@@ -728,19 +729,20 @@ def parse_prowjob_json(prowjob_json_text):
         ci_user=or_none(annotations['ci.openshift.io/user']),
         schema_level=10,
         retest=or_none(labels['prow.k8s.io/retest']),
+        gcs_bucket=bkt,
     )
 
     record_dict = dict(record._asdict())
     return record_dict
 
 
-def parse_prowjob_from_gcs(file_path: str):
+def parse_prowjob_from_gcs(file_path: str, bkt: str):
     b = global_result_storage_bucket_client.get_blob(file_path)
     if not b:
         return None
 
     prowjob_json_text = b.download_as_text()
-    return parse_prowjob_json(prowjob_json_text)
+    return parse_prowjob_json(prowjob_json_text, bkt)
 
 
 junk_bytes_pattern = re.compile(r'[^\x20-\x7E]+')
@@ -929,8 +931,8 @@ def process_releaseinfo_from_gcs_file_path(file_path: str):
         raise IOError("Encountered errors while inserting release info rows")
 
 
-def process_prowjob_from_gcs(file_path: str):
-    record_dict = parse_prowjob_from_gcs(file_path)
+def process_prowjob_from_gcs(file_path: str, bkt: str):
+    record_dict = parse_prowjob_from_gcs(file_path, bkt)
     if not record_dict:
         return
     bq = global_bq_client
@@ -954,7 +956,7 @@ def gcs_finalize(event, context):
 
     if gcs_file_name.endswith("/prowjob.json"):
         process_connection_setup(bucket=bucket)
-        process_prowjob_from_gcs(gcs_file_name)
+        process_prowjob_from_gcs(gcs_file_name, bucket)
     elif gcs_file_name.endswith('/finished.json') or gcs_file_name.endswith('/build-log.txt'):
         # there does not seem to be a guarantee on which file is written last. This
         # may lead to duplicates, but that is better than missing data.
