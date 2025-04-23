@@ -265,6 +265,10 @@ class JUnitTestRecord(NamedTuple):
 
     flake_count: int
 
+    failure_message: str
+    failure_content: str
+    system_out_content: str
+
 
 # Group 1 extracts path up to prowjob id (e.g. 	branch-ci-openshift-jenkins-release-4.10-images/1604867803796475904 ).
 # Group 2 extracts prowjob name
@@ -425,7 +429,7 @@ def determine_prowjob_architecture(lowercase_prowjob_name: str) -> str:
 NETWORK_VARIANTS: Optional[List[VariantMatcher]] = None
 
 
-def get_nework_variants() -> List[VariantMatcher]:
+def get_network_variants() -> List[VariantMatcher]:
     global NETWORK_VARIANTS
     if NETWORK_VARIANTS:
         return NETWORK_VARIANTS
@@ -436,7 +440,7 @@ def get_nework_variants() -> List[VariantMatcher]:
 
 
 def determine_prowjob_network(lowercase_prowjob_name: str, branch: str) -> str:
-    for pv in get_nework_variants():
+    for pv in get_network_variants():
         if pv.matches(lowercase_prowjob_name):
             return pv.name
 
@@ -499,6 +503,17 @@ class FlakeInfo:
         self.has_succeeded = False
 
 
+def truncate_middle(content: str):
+    """
+    Important information tends to be at the beginning and end of errors.
+    If a string exceeds a maximum size, return only the first and last part of the
+    string with visible "truncated" message in the middle.
+    """
+    if len(content) < 5*1024 + 50:
+        return content
+    return content[:2*1024] + '..truncated..' + content[-2*1024:]
+
+
 class JUnitHandler(sax.handler.ContentHandler):
 
     def __init__(self, modified_time: str, prowjob_name: str, prowjob_build_id: str, file_path: str):
@@ -510,6 +525,10 @@ class JUnitHandler(sax.handler.ContentHandler):
         self.test_name = None
         self.test_success = None
         self.test_skipped = None
+        self.failure_message = None
+        self.failure_content = None
+        self.system_out_content = None
+        self.character_content = StringIO()
         self.prowjob_build_id = prowjob_build_id
         self.file_path = file_path
         self.record_dicts: List[Dict] = list()
@@ -532,6 +551,9 @@ class JUnitHandler(sax.handler.ContentHandler):
                 # Lop off the nonce so we can effectively GROUP BY on this column.
                 self.testsuite = 'OOMCheck'
 
+        elif name == 'failure':
+            self.failure_message = truncate_middle(attrs.get('message', ''))
+
         elif name == 'testcase':
             self.test_name: str = attrs.get('name')
             id_match = test_id_pattern.match(self.test_name)  # Does the test has a test_id override?
@@ -552,9 +574,17 @@ class JUnitHandler(sax.handler.ContentHandler):
         self.startElement(name, attributes)
 
     def endElement(self, name):
+        self.character_content.truncate(5*1024)  # Limit the number of characters we put into the database
+        collected_content = self.character_content.getvalue().strip()
+        self.character_content = StringIO()  # Reset buffer content
 
         if name == 'failure':
             self.test_success = False
+            if not self.failure_content:  # Will be set when using ET, but not when using SAX
+                self.failure_content = truncate_middle(collected_content)
+        elif name == 'system-out':
+            if not self.system_out_content:  # Will be set when using ET, but not when using SAX
+                self.system_out_content = truncate_middle(collected_content)
         elif name == 'error':
             self.test_success = False
         elif name == 'skipped':
@@ -608,14 +638,20 @@ class JUnitHandler(sax.handler.ContentHandler):
                 flat_variants=','.join(other_variants),
                 flake_count=flake_count_to_record,
                 testsuite=self.testsuite,
+                failure_content=self.failure_content,
+                failure_message='',  # Set to self.failure_message if TRT wants <failure message='...'>. Conserve DB size otherwise.
+                system_out_content='',  # Set to self.system_out_content if TRT wants this data. Conserve DB size otherwise.
             )
+
             self.record_dicts.append(record._asdict())
 
     def endElementNS(self, name, qname):
         self.endElement(name)
 
     def characters(self, content):
-        pass
+        # This method needs to be enhanced if there are nested elements with CDATA.
+        # It would need to aggregate content based on the current tag.
+        self.character_content.write(content)
 
 
 def parse_junit_xml(junit_xml_text, modified_time: str, prowjob_name: str, prowjob_build_id: str, file_path: str) -> List[Dict]:
@@ -627,11 +663,26 @@ def parse_junit_xml(junit_xml_text, modified_time: str, prowjob_name: str, prowj
             # Get the root element.
             if index == 0:
                 root = elem
+
             if event == 'start':
+                if elem.tag == 'testcase':
+                    handler.failure_content = ''
+                    handler.system_out_content = ''
+
+                if elem.tag == 'system-out':
+                    handler.system_out_content = truncate_middle(elem.text.strip()) if elem.text else ""
+                    elem.clear()
+
+                if elem.tag == 'failure':
+                    handler.failure_content = truncate_middle(elem.text.strip()) if elem.text else ""
+                    elem.clear()
+
                 handler.startElement(elem.tag, elem.attrib)
+
             if event == "end":
                 handler.endElement(elem.tag)
                 root.clear()
+
     else:
         sax.parseString(junit_xml_text, handler, SimpleErrorHandler())
 
@@ -1792,7 +1843,16 @@ if __name__ == '__main__':
     #process_connection_setup()
     #parse_junit_from_gcs_file_path('logs/periodic-ci-openshift-release-master-ci-4.14-e2e-gcp-sdn/1640905778267164672/artifacts/e2e-gcp-sdn/openshift-e2e-test/artifacts/junit/junit_e2e__20230329-031207.xml')
 
-    cold_load_build_log_txt('test-platform-results')
+    #cold_load_build_log_txt('test-platform-results')
+
+    import requests
+    url = "https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/logs/periodic-ci-openshift-release-master-konflux-nightly-4.19-e2e-aws-ovn-upgrade/1912429868163796992/artifacts/e2e-aws-ovn-upgrade/openshift-e2e-test/artifacts/junit/junit_e2e__20250416-112104.xml"
+
+    response = requests.get(url)
+    response.raise_for_status()  # Raises HTTPError for bad responses
+
+    xml_content = response.text  # This will be a UTF-8 decoded string
+    parse_junit_xml(xml_content, "test", "test", "test", "test")
 
     #process_releaseinfo_from_gcs_file_path('pr-logs/pull/openshift_release/40864/rehearse-40864-pull-ci-openshift-cluster-api-release-4.11-e2e-aws/1675182964247367680/artifacts/e2e-aws/gather-extra/artifacts/releaseinfo.json')
     #cold_load_junit()
