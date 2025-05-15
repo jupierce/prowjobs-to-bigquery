@@ -1133,9 +1133,9 @@ MAX_BUILD_LOG_TXT_BLOB_SIZE = 5 * 1024 * 1024
 ANSI_ESCAPE_PATTERN = re.compile(r'\x1b\[[0-9;]*m')
 BINARY_ANSI_ESCAPE_PATTERN = re.compile(rb'\x1b\[[0-9;]*[A-Za-z]')
 
-BUILD_LOG_CI_OPERATOR_LOG_ENTRY_PREFIX = re.compile(rf"^(?:{ANSI_ESCAPE_PATTERN.pattern})?(?P<level>INFO|DEBUG|ERROR|WARN)(?:{ANSI_ESCAPE_PATTERN.pattern})?\[(?P<timestamp>[-0-9:TZ]+)\](?:{ANSI_ESCAPE_PATTERN.pattern})? ")  # Capturing for decomposing prefix into parts
+BUILD_LOG_CI_OPERATOR_LOG_ENTRY_PREFIX = re.compile(rf"^(?:{ANSI_ESCAPE_PATTERN.pattern})?(?P<level>INFO|DEBUG|ERROR|WARN|ERRO|DEBU|TRACE|TRAC|FATAL|FATA)(?:{ANSI_ESCAPE_PATTERN.pattern})?\[(?P<timestamp>[-0-9:TZ]+)\](?:{ANSI_ESCAPE_PATTERN.pattern})? ")  # Capturing for decomposing prefix into parts
 
-# If we are not given a ci-operator log, then this regex is used to
+# If we are not given a structure c-operator log line in build-log.txt, then this regex is used to
 # determine whether we include the build-log.txt line or not. This is
 # used because some build-log.txt files can be 50000 lines long and
 # serve no diagnostic purpose.
@@ -1195,6 +1195,15 @@ units = {
     "w":  _week_size,
     "mm": _month_size,
     "y":  _year_size,
+}
+
+level_map = {
+    'e': 'error',
+    'w': 'warn',
+    'd': 'debug',
+    't': 'trace',
+    'f': 'fatal',
+    'i': 'info',
 }
 
 _duration_re = re.compile(r'([\d\.]+)([a-zµμ]+)')
@@ -1465,6 +1474,8 @@ def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers
                         log_entries.append(in_ci_operator_entry)
 
                 level = match.group('level').lower()
+                normalized_level = level_map.get(level[0], level)
+
                 timestamp = match.group('timestamp')
                 msg = result[match.end():]
                 if level in ["trace", "debug"]:
@@ -1472,7 +1483,7 @@ def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers
                 dt = datetime.datetime.fromisoformat(timestamp.rstrip('Z'))
                 dt.replace(tzinfo=datetime.timezone.utc)
                 in_ci_operator_entry = {
-                    'level': level,
+                    'level': normalized_level,
                     'time': str(dt),
                     'msg': [msg],  # To prevent a large number of slow appends, just keep msgs in a list and ''.join at the end.
                 }
