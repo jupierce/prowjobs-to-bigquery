@@ -9,6 +9,7 @@ import re
 import hashlib
 import traceback
 import time
+import html
 from xml import sax
 
 from io import StringIO
@@ -145,6 +146,35 @@ def process_connection_setup(bucket: str):
         global_storage_client = storage.Client(project=bucket_project)
         global_result_storage_bucket_client = global_storage_client.bucket(bucket)
         global_bq_client = bigquery.Client(project=global_bucket_info.bigquery_project)
+
+
+class JunitTestcase:
+
+    def __init__(self, name: str, duration: str = "0"):
+        self.name: str = name
+        self.time: str = duration
+        self.system_out: Optional[str] = None
+        self.failure_msg: Optional[str] = None
+        self.skipped_msg: Optional[str] = None
+
+    def set_failure_msg(self, msg: Optional[str]):
+        self.failure_msg = msg
+
+    def set_skipped_msg(self, msg: Optional[str]):
+        self.skipped_msg = msg
+
+    def set_system_out(self, output: Optional[str]):
+        self.system_out = output
+
+    def set_time(self, time):
+        self.time = str(time)
+
+
+class JunitFile(NamedTuple):
+    gcs_path: str
+    suite: str
+    properties: Optional[Dict]
+    testcases: Optional[List[JunitTestcase]]
 
 
 class JobsRecord(NamedTuple):
@@ -293,6 +323,34 @@ prowjob_build_id_pattern = re.compile(r"^\d{12,}$")
 # extracts the first ocp version like '4.11' (in group 1) or 'master' or 'main' (in group 2)
 branch_pattern = re.compile(r".*?\D+[-\/](\d\.\d+)\D?.*|.*\-(master|main)\-.*")
 
+go_time_units = {
+    'd': 86400,  # 24 * 60 * 60
+    'h': 3600,  # 60 * 60
+    'm': 60,
+    's': 1,
+}
+
+
+def parse_go_duration(duration_str):
+    """
+    Parse a Go-style duration string into total seconds.
+    Supported units: d, h, m, s
+    Example: "1d2h30m15s" -> 93615 seconds
+    """
+    pattern = re.compile(r'(?P<value>\d+)(?P<unit>[dhms])')
+    matches = pattern.findall(duration_str)
+
+    if not matches:
+        return 0
+
+    total_seconds = 0
+    for value, unit in matches:
+        if unit not in go_time_units:
+            return 0
+        total_seconds += int(value) * go_time_units[unit]
+
+    return total_seconds
+
 
 def parse_job_intervals_json(prowjob_name: str, prowjob_build_id: str, job_intervals_json_text: str, is_pr: bool) -> Optional[List[Dict]]:
     try:
@@ -323,6 +381,69 @@ def parse_job_intervals_json(prowjob_name: str, prowjob_build_id: str, job_inter
         records.append(record)
 
     return records
+
+
+def escape_xml(text: str) -> str:
+    return html.escape(text, quote=True)
+
+
+def write_junit_files(junit_files: Optional[List[JunitFile]]):
+    if not junit_files:
+        return
+
+    for junit_file in junit_files:
+        testcases = junit_file.testcases
+        total_tests = len(testcases)
+        total_failures = sum(1 for tc in testcases if tc.failure_msg)
+        total_skipped = sum(1 for tc in testcases if tc.skipped_msg)
+        total_time = sum(float(tc.time or "0") for tc in testcases)
+
+        lines = list()
+        lines.append('<?xml version="1.0" encoding="UTF-8"?>')
+        lines.append(
+            f'<testsuite name="{escape_xml(junit_file.suite)}" '
+            f'tests="{total_tests}" skipped="{total_skipped}" '
+            f'failures="{total_failures}" time="{int(total_time)}">'
+        )
+        # Add properties
+        if junit_file.properties:
+            lines.append('  <properties>')
+            for key, value in junit_file.properties.items():
+                lines.append(f'    <property name="{escape_xml(str(key))}" value="{escape_xml(str(value))}"/>')
+            lines.append('  </properties>')
+
+        # Add test cases
+        if testcases:
+            for tc in junit_file.testcases:
+
+                lines.append(f'  <testcase name="{escape_xml(tc.name)}" time="{escape_xml(tc.time)}">')
+
+                if tc.failure_msg:
+                    lines.append(f'    <failure>{escape_xml(tc.failure_msg)}</failure>')
+
+                if tc.skipped_msg:
+                    lines.append(f'    <skipped>{escape_xml(tc.skipped_msg)}</skipped>')
+
+                if tc.system_out:
+                    lines.append(f'    <system-out>{escape_xml(tc.system_out)}</system-out>')
+
+                lines.append('  </testcase>')
+
+        lines.append('</testsuite>')
+
+        # Convert to bytes
+        xml_content = "\n".join(lines).encode("utf-8")
+
+        try:
+            blob = global_result_storage_bucket_client.blob(junit_file.gcs_path)
+            if not blob.exists():
+                blob.upload_from_string(xml_content, content_type="application/xml")
+                print(f"Uploaded JUnit XML to {junit_file.gcs_path}")
+            else:
+                print(f'File already existed; skipping upload {junit_file.gcs_path}')
+        except:
+            print(f"Failed uploading JUnit XML to {junit_file.gcs_path}")
+            raise
 
 
 def parse_releaseinfo_json(prowjob_name: str, prowjob_build_id: str, releaseinfo_json_text: str, is_pr: bool) -> Optional[List[Dict]]:
@@ -1008,13 +1129,14 @@ def gcs_finalize(event, context):
     if gcs_file_name.endswith("/prowjob.json"):
         process_connection_setup(bucket=bucket)
         process_prowjob_from_gcs(gcs_file_name, bucket)
-    elif gcs_file_name.endswith('/finished.json') or gcs_file_name.endswith('/build-log.txt'):
+    elif gcs_file_name.endswith('/build-log.txt'):
         # there does not seem to be a guarantee on which file is written last. This
         # may lead to duplicates, but that is better than missing data.
         process_connection_setup(bucket=bucket)
         file_path = pathlib.Path(gcs_file_name)
         ci_operator_log_path = file_path.parent.joinpath('build-log.txt')
-        new_row, _ = process_build_log_txt_path(bucket, str(ci_operator_log_path))
+        new_row, _, junit_files = process_build_log_txt_path(bucket, str(ci_operator_log_path))
+
         if new_row is not None:
             table_ref = global_bq_client.dataset('ci_analysis_us').table('ci_operator_logs_json')
             ci_operator_logs_json_table = global_bq_client.get_table(table_ref)
@@ -1022,6 +1144,8 @@ def gcs_finalize(event, context):
             if errors != []:
                 print(f'Errors encountered while inserting ci-operator.log for {ci_operator_log_path}: {errors[0]}')
                 raise IOError("Encountered errors while inserting ci-operator.log rows")
+
+        write_junit_files(junit_files)
 
     elif gcs_file_name.endswith('.xml'):
         process_connection_setup(bucket=bucket)
@@ -1135,7 +1259,7 @@ BINARY_ANSI_ESCAPE_PATTERN = re.compile(rb'\x1b\[[0-9;]*[A-Za-z]')
 
 BUILD_LOG_CI_OPERATOR_LOG_ENTRY_PREFIX = re.compile(rf"^(?:{ANSI_ESCAPE_PATTERN.pattern})?(?P<level>INFO|DEBUG|ERROR|WARN|ERRO|DEBU|TRACE|TRAC|FATAL|FATA)(?:{ANSI_ESCAPE_PATTERN.pattern})?\[(?P<timestamp>[-0-9:TZ]+)\](?:{ANSI_ESCAPE_PATTERN.pattern})? ")  # Capturing for decomposing prefix into parts
 
-# If we are not given a structure c-operator log line in build-log.txt, then this regex is used to
+# If we are not given a structure ci-operator log line in build-log.txt, then this regex is used to
 # determine whether we include the build-log.txt line or not. This is
 # used because some build-log.txt files can be 50000 lines long and
 # serve no diagnostic purpose.
@@ -1357,19 +1481,9 @@ def process_ci_operator_log_path_pull_secret_load_time(bucket_name: str, ci_oper
 
     prowjob_url = global_bucket_info.bucket_url_prefix + ci_operator_log_path.rsplit('/', 2)[0]
 
+    # This used to be grabbed from finished.json, but it may not exist at the time build-logs.txt is written.
+    # Just do a join if you reall need to know.
     prowjob_state = None
-    try:
-        finished_json_path = ci_operator_log_path.rsplit('/', 1)[0] + '/' + 'finished.json'
-        fj = global_result_storage_bucket_client.get_blob(finished_json_path)
-        if fj:
-            finished_json_content: str = fj.download_as_text()
-            finished = json.loads(finished_json_content)
-            prowjob_state = finished['result']
-            if 'metadata' in finished:
-                # Not all finished.json have metadata.
-                ci_namespace = finished['metadata']['work-namespace']
-    except Exception as e:
-        print(f'Failed to load finished.json {prowjob_url}: {e}')
 
     row_size_estimate = 0
     try:
@@ -1410,9 +1524,10 @@ def process_ci_operator_log_path_pull_secret_load_time(bucket_name: str, ci_oper
         return empty_result
 
 
-def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers: Optional[Dict[str, float]] = None) -> [Dict, int]:
+def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers: Optional[Dict[str, float]] = None) -> [Dict, int, Optional[List[JunitFile]]]:
     process_connection_setup(bucket_name)
-    empty_result = (None, 0)
+    junit_files: List[JunitFile] = list()
+    empty_result = (None, 0, junit_files)
 
     # Example path: logs/branch-ci-openshift-cluster-monitoring-operator-master-images/1818971764282101760/build-log.txt
     # ..../<prowjob_job_name>/<prowjob_build_id>/build-log.txt
@@ -1444,6 +1559,19 @@ def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers
     except Exception as e:
         print(f'Failed to load finished.json {prowjob_url}: {e}')
 
+    prowjob_junit_testcases: List[JunitTestcase] = list()
+    testcase_prowjob_no_timeout = JunitTestcase(
+        name='Job run should complete before timeout'
+    )
+    prowjob_junit_testcases.append(testcase_prowjob_no_timeout)
+    prowjob_junit_file = JunitFile(
+        gcs_path=str(pathlib.Path(build_log_txt_path).parent.joinpath('prowjob_junit.xml')),
+        suite='prowjob-junit',
+        properties=None,
+        testcases=prowjob_junit_testcases,
+    )
+    junit_files.append(prowjob_junit_file)
+
     row_size_estimate = 0
     try:
 
@@ -1467,6 +1595,10 @@ def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers
         for result in split_results:
             with ExecutionTimer('ci_operator_log_match', timers):
                 match = BUILD_LOG_CI_OPERATOR_LOG_ENTRY_PREFIX.match(result)
+
+            if 'Process did not finish before ' in result:
+                testcase_prowjob_no_timeout.set_failure_msg(result)
+
             if match:
                 if in_ci_operator_entry:
                     with ExecutionTimer('log_entries_append', timers):
@@ -1482,6 +1614,12 @@ def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers
                     continue
                 dt = datetime.datetime.fromisoformat(timestamp.rstrip('Z'))
                 dt.replace(tzinfo=datetime.timezone.utc)
+
+                if msg.startswith('Ran for '):
+                    prowjob_duration_str = msg.strip().split(' ')[-1]
+                    prowjob_duration = parse_go_duration(prowjob_duration_str)
+                    testcase_prowjob_no_timeout.set_time(prowjob_duration)
+
                 in_ci_operator_entry = {
                     'level': normalized_level,
                     'time': str(dt),
@@ -1558,7 +1696,7 @@ def process_build_log_txt_path(bucket_name: str, build_log_txt_path: str, timers
             'prowjob_state': prowjob_state,
         }
 
-        return new_row, row_size_estimate
+        return new_row, row_size_estimate, junit_files
 
     except Exception as e:
         print(f'Failed on {build_log_txt_path}: {e}')
@@ -1614,7 +1752,8 @@ def build_log_txt_process_queue(input_queue):
             ci_operator_logs_json_table = global_bq_client.get_table(table_ref)
 
         build_log_txt_file_path = event['file_path']
-        new_row, new_row_size_estimate = process_build_log_txt_path(bucket_name, build_log_txt_file_path, timers=timers)
+        new_row, new_row_size_estimate, junit_files = process_build_log_txt_path(bucket_name, build_log_txt_file_path, timers=timers)
+        write_junit_files(junit_files)
         if new_row is None:
             continue
 
