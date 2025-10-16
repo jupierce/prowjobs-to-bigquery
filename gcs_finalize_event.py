@@ -196,6 +196,7 @@ class JobsRecord(NamedTuple):
     base_sha: str
     pr_sha: str
     prowjob_start: str
+    prowjob_pending: str
     prowjob_completion: str
     prowjob_state: str
     prowjob_labels: List[str]
@@ -886,6 +887,7 @@ def parse_prowjob_json(prowjob_json_text, bkt):
         base_sha=or_none(refs.base_ref),
         pr_sha=or_none(pull.sha),
         prowjob_start=to_ts(prowjob.status.startTime),
+        prowjob_pending=to_ts(prowjob.status.pendingTime),
         prowjob_completion=to_ts(prowjob.status.completionTime),
         prowjob_state=or_none(prowjob.status.state),
         prowjob_labels=to_kv_list(labels),
@@ -967,7 +969,12 @@ def process_junit_file_from_gcs(prowjob_name: str, prowjob_build_id: str, file_p
     if not junit_records:
         return
     bq = global_bq_client
-    errors = bq.insert_rows_json(global_bucket_info.table_id_junit, junit_records)
+    errors = []
+    chunk_size = 2000  # bigquery will return 413 if incoming request is too large (10MB). Chunk the results if they are long
+    remaining_records = junit_records
+    while remaining_records:
+        chunk, remaining_records = remaining_records[:chunk_size], remaining_records[chunk_size:]
+        errors.extend(bq.insert_rows_json(global_bucket_info.table_id_junit, chunk))
     if errors == []:
         print(f"New rows have been added: {len(junit_records)}.")
     else:
