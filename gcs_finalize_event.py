@@ -969,7 +969,12 @@ def process_junit_file_from_gcs(prowjob_name: str, prowjob_build_id: str, file_p
     if not junit_records:
         return
     bq = global_bq_client
-    errors = bq.insert_rows_json(global_bucket_info.table_id_junit, junit_records)
+    errors = []
+    chunk_size = 2000  # bigquery will return 413 if incoming request is too large (10MB). Chunk the results if they are long
+    remaining_records = junit_records
+    while remaining_records:
+        chunk, remaining_records = remaining_records[:chunk_size], remaining_records[chunk_size:]
+        errors.extend(bq.insert_rows_json(global_bucket_info.table_id_junit, chunk))
     if errors == []:
         print(f"New rows have been added: {len(junit_records)}.")
     else:
