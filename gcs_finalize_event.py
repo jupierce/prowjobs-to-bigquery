@@ -196,6 +196,7 @@ class JobsRecord(NamedTuple):
     base_sha: str
     pr_sha: str
     prowjob_start: str
+    prowjob_pending: str
     prowjob_completion: str
     prowjob_state: str
     prowjob_labels: List[str]
@@ -886,6 +887,7 @@ def parse_prowjob_json(prowjob_json_text, bkt):
         base_sha=or_none(refs.base_ref),
         pr_sha=or_none(pull.sha),
         prowjob_start=to_ts(prowjob.status.startTime),
+        prowjob_pending=to_ts(prowjob.status.pendingTime),
         prowjob_completion=to_ts(prowjob.status.completionTime),
         prowjob_state=or_none(prowjob.status.state),
         prowjob_labels=to_kv_list(labels),
