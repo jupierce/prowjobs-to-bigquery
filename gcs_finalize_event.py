@@ -22,7 +22,7 @@ from google.cloud import bigquery, storage
 
 RELEASEINFO_SCHEMA_LEVEL = 2
 CI_OPERATOR_LOGS_JSON_SCHEMA_LEVEL = 20
-JUNIT_TABLE_SCHEMA_LEVEL = 14
+JUNIT_TABLE_SCHEMA_LEVEL = 15
 JOB_INTERVALS_SCHEMA_LEVEL = 3
 TEMP_CI_OPERATOR_SCHEMA_LEVEL = 3
 
@@ -295,6 +295,11 @@ class JUnitTestRecord(NamedTuple):
     flat_variants: str
 
     flake_count: int
+
+    # OTE metadata fields
+    start_time: str
+    end_time: str
+    lifecycle: str
 
     failure_message: str
     failure_content: str
@@ -655,6 +660,11 @@ class JUnitHandler(sax.handler.ContentHandler):
         self.file_path = file_path
         self.record_dicts: List[Dict] = list()
         self.flake_info: defaultdict[str, FlakeInfo] = defaultdict(FlakeInfo)
+        
+        # OTE metadata fields
+        self.test_start_time = None
+        self.test_end_time = None
+        self.test_lifecycle = None
 
         branch_match = branch_pattern.match(self.prowjob_name)
         if branch_match:
@@ -691,6 +701,11 @@ class JUnitHandler(sax.handler.ContentHandler):
                 self.test_duration_ms = 0
             self.test_success = True  # Assume true until we hit a failure element
             self.test_skipped = False  # Assume true until we hit a failure element
+            
+            # Parse OTE metadata attributes
+            self.test_start_time = attrs.get('start-time', '')
+            self.test_end_time = attrs.get('end-time', '')
+            self.test_lifecycle = attrs.get('lifecycle', '')
 
     def startElementNS(self, name, qname, attributes):
         self.startElement(name, attributes)
@@ -760,6 +775,9 @@ class JUnitHandler(sax.handler.ContentHandler):
                 flat_variants=','.join(other_variants),
                 flake_count=flake_count_to_record,
                 testsuite=self.testsuite,
+                start_time=self.test_start_time or '',
+                end_time=self.test_end_time or '',
+                lifecycle=self.test_lifecycle or '',
                 failure_content=self.failure_content,
                 failure_message='',  # Set to self.failure_message if TRT wants <failure message='...'>. Conserve DB size otherwise.
                 system_out_content='',  # Set to self.system_out_content if TRT wants this data. Conserve DB size otherwise.
