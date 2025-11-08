@@ -25,6 +25,7 @@ CI_OPERATOR_LOGS_JSON_SCHEMA_LEVEL = 20
 JUNIT_TABLE_SCHEMA_LEVEL = 14
 JOB_INTERVALS_SCHEMA_LEVEL = 3
 TEMP_CI_OPERATOR_SCHEMA_LEVEL = 3
+CI_OPERATOR_METRICS_SCHEMA_LEVEL = 1
 
 
 class BucketInfo(NamedTuple):
@@ -51,6 +52,7 @@ class BucketInfo(NamedTuple):
     table_name_job_intervals: str
     table_name_job_releases: str
     table_name_ci_operator_logs_json: str
+    table_name_ci_operator_metrics: str
 
     @property
     def table_id_jobs(self):
@@ -76,6 +78,10 @@ class BucketInfo(NamedTuple):
     def table_id_ci_operator_logs_json(self):
         return f'{self.dest_bigquery_dataset}.{self.table_name_ci_operator_logs_json}'
 
+    @property
+    def table_id_ci_operator_metrics(self):
+        return f'{self.dest_bigquery_dataset}.{self.table_name_ci_operator_metrics}'
+
 
 DEFAULT_TABLE_NAMES = {
     'table_name_jobs': 'jobs',
@@ -83,7 +89,8 @@ DEFAULT_TABLE_NAMES = {
     'table_name_junit_pr': 'junit_pr',
     'table_name_job_intervals': 'job_intervals',
     'table_name_job_releases': 'job_releases',
-    'table_name_ci_operator_logs_json': 'ci_operator_logs_json'
+    'table_name_ci_operator_logs_json': 'ci_operator_logs_json',
+    'table_name_ci_operator_metrics': 'ci_operator_metrics'
 }
 
 
@@ -481,6 +488,550 @@ def parse_releaseinfo_json(prowjob_name: str, prowjob_build_id: str, releaseinfo
         records.append(record)
 
     return records
+
+
+def safe_get(obj, *keys, default=None):
+    """Safely navigate nested dictionaries/models and return default if any key is missing."""
+    try:
+        result = obj
+        for key in keys:
+            if isinstance(result, Model):
+                result = result[key]
+                if result is Missing:
+                    return default
+            elif isinstance(result, dict):
+                result = result.get(key, default)
+                if result is None or result is Missing:
+                    return default
+            else:
+                return default
+        return result if result is not Missing else default
+    except:
+        return default
+
+
+def parse_ci_operator_metrics_json(prowjob_name: str, prowjob_build_id: str, metrics_json_text: str, file_path: str, blob_created_at) -> Optional[Dict]:
+    """
+    Parse ci-operator-metrics.json file and return a record dict for BigQuery insertion.
+    This function is resilient to schema changes and missing fields.
+    
+    The ci-operator-metrics.json format contains:
+    - 'events' array: Step-level execution tracking with locators, messages, and timing
+    - 'test_platform_insights' array: High-level platform events (started, configuration, execution_completed, etc.)
+    - 'images' array: ImageStream and tag import events
+    - 'openshift_builds' array: Build lifecycle metrics
+    - 'nodes' array: Node resource utilization and workload placement
+    - 'leases' array: Infrastructure lease acquisition metrics
+    - 'pods' array: Pod lifecycle and performance metrics
+    
+    All fields are optional and missing data is handled gracefully with warnings.
+    """
+    try:
+        metrics_dict = json.loads(metrics_json_text)
+    except Exception as e:
+        print(f'Found invalid ci-operator-metrics.json: {prowjob_build_id}: {e}')
+        return None
+
+    metrics = Model(metrics_dict)
+    warnings = []
+    
+    # Build the record
+    record = {
+        'schema_level': CI_OPERATOR_METRICS_SCHEMA_LEVEL,
+        'created': str(blob_created_at),
+        'prowjob_build_id': prowjob_build_id,
+        'prowjob_job_name': prowjob_name,
+        'prowjob_url': global_bucket_info.bucket_url_prefix + file_path.rsplit('/artifacts/', 1)[0],
+        'path': file_path,
+    }
+
+    # Parse events (new step-level execution events)
+    try:
+        events_list = []
+        if metrics.events and metrics.events is not Missing:
+            for event in metrics.events:
+                # Convert Model to primitive dict first to avoid issues with reserved keywords like 'from'
+                event_primitive = event.primitive() if hasattr(event, 'primitive') else event
+                
+                locator = event_primitive.get('locator', {})
+                message = event_primitive.get('message', {})
+                
+                # JSON fields must be serialized to strings for BigQuery
+                keys_json = None
+                if 'keys' in locator and locator['keys'] is not None:
+                    keys_json = json.dumps(locator['keys'])
+                
+                annotations_json = None
+                if 'annotations' in message and message['annotations'] is not None:
+                    annotations_json = json.dumps(message['annotations'])
+                
+                events_list.append({
+                    'level': event_primitive.get('level'),
+                    'source': event_primitive.get('source'),
+                    'locator': {
+                        'type': locator.get('type'),
+                        'name': locator.get('name'),
+                        'keys': keys_json,
+                    },
+                    'message': {
+                        'reason': message.get('reason'),
+                        'cause': message.get('cause'),
+                        'humanMessage': message.get('humanMessage'),
+                        'annotations': annotations_json,
+                    },
+                    'from': to_ts(event_primitive.get('from')),
+                    'to': to_ts(event_primitive.get('to')),
+                    'timestamp': to_ts(event_primitive.get('timestamp')),
+                })
+        record['events'] = events_list
+    except Exception as e:
+        warnings.append(f'Error parsing events: {e}')
+        record['events'] = []
+
+    # Parse test_platform_insights - keep raw copy
+    try:
+        raw_insights = []
+        if metrics.test_platform_insights and metrics.test_platform_insights is not Missing:
+            for insight in metrics.test_platform_insights:
+                # JSON fields must be serialized to strings for BigQuery
+                additional_context_json = None
+                if insight.additional_context is not Missing:
+                    additional_context_json = json.dumps(insight.additional_context.primitive())
+                
+                insight_dict = {
+                    'name': or_none(insight.name),
+                    'additional_context': additional_context_json,
+                    'timestamp': to_ts(insight.timestamp) if insight.timestamp is not Missing else None,
+                }
+                raw_insights.append(insight_dict)
+        record['test_platform_insights'] = raw_insights
+    except Exception as e:
+        warnings.append(f'Error parsing test_platform_insights: {e}')
+        record['test_platform_insights'] = []
+
+    # Parse and promote specific test_platform_insights to top-level tpi_* fields
+    insights_by_name = {}
+    try:
+        if metrics.test_platform_insights and metrics.test_platform_insights is not Missing:
+            for insight in metrics.test_platform_insights:
+                name = or_none(insight.name)
+                if name:
+                    if name not in insights_by_name:
+                        insights_by_name[name] = []
+                    insights_by_name[name].append(insight)
+    except Exception as e:
+        warnings.append(f'Error organizing insights: {e}')
+
+    # tpi_started
+    try:
+        if 'started' in insights_by_name:
+            insight = insights_by_name['started'][0]
+            ctx = insight.additional_context
+            job_spec = ctx.job_spec if ctx is not Missing else Model()
+            pulls_list = []
+            if job_spec.pulls and job_spec.pulls is not Missing:
+                for pull in job_spec.pulls:
+                    pulls_list.append({
+                        'author': or_none(pull.author),
+                        'number': or_none(pull.number),
+                        'sha': or_none(pull.sha),
+                    })
+            record['tpi_started'] = {
+                'job_spec': {
+                    'branch': or_none(job_spec.branch),
+                    'buildid': or_none(job_spec.buildid),
+                    'job': or_none(job_spec.job),
+                    'org': or_none(job_spec.org),
+                    'prowjobid': or_none(job_spec.prowjobid),
+                    'pulls': pulls_list,
+                    'repo': or_none(job_spec.repo),
+                    'target': or_none(job_spec.target),
+                    'type': or_none(job_spec.type),
+                },
+                'timestamp': to_ts(insight.timestamp),
+            }
+        else:
+            record['tpi_started'] = None
+    except Exception as e:
+        warnings.append(f'Error parsing tpi_started: {e}')
+        record['tpi_started'] = None
+
+    # tpi_namespace_initialized
+    try:
+        if 'namespace_initialized' in insights_by_name:
+            insight = insights_by_name['namespace_initialized'][0]
+            ctx = insight.additional_context
+            record['tpi_namespace_initialized'] = {
+                'duration_seconds': or_none(ctx.duration_seconds) if ctx is not Missing else None,
+                'namespace': or_none(ctx.namespace) if ctx is not Missing else None,
+                'timestamp': to_ts(insight.timestamp),
+            }
+        else:
+            record['tpi_namespace_initialized'] = None
+    except Exception as e:
+        warnings.append(f'Error parsing tpi_namespace_initialized: {e}')
+        record['tpi_namespace_initialized'] = None
+
+    # tpi_namespace_created
+    try:
+        if 'namespace_created' in insights_by_name:
+            insight = insights_by_name['namespace_created'][0]
+            ctx = insight.additional_context
+            record['tpi_namespace_created'] = {
+                'namespace': or_none(ctx.namespace) if ctx is not Missing else None,
+                'timestamp': to_ts(insight.timestamp),
+            }
+        else:
+            record['tpi_namespace_created'] = None
+    except Exception as e:
+        warnings.append(f'Error parsing tpi_namespace_created: {e}')
+        record['tpi_namespace_created'] = None
+
+    # tpi_configuration
+    try:
+        if 'configuration' in insights_by_name:
+            insight = insights_by_name['configuration'][0]
+            ctx = insight.additional_context
+            cluster_info = ctx.cluster_info if ctx is not Missing else Model()
+            targets_list = []
+            if ctx is not Missing and ctx.targets and ctx.targets is not Missing:
+                targets_list = list(ctx.targets.primitive())
+            
+            # cluster_profiles is ARRAY<JSON>, so each element must be a JSON string
+            cluster_profiles = []
+            if cluster_info.cluster_profiles and cluster_info.cluster_profiles is not Missing:
+                for profile in cluster_info.cluster_profiles:
+                    if isinstance(profile, dict):
+                        cluster_profiles.append(json.dumps(profile))
+                    elif profile is not Missing:
+                        cluster_profiles.append(json.dumps(profile.primitive() if hasattr(profile, 'primitive') else profile))
+            
+            record['tpi_configuration'] = {
+                'base_namespace': or_none(ctx.base_namespace) if ctx is not Missing else None,
+                'branch': or_none(ctx.branch) if ctx is not Missing else None,
+                'cluster_info': {
+                    'cluster_id': or_none(cluster_info.cluster_id),
+                    'cluster_profiles': cluster_profiles,
+                    'console_host': or_none(cluster_info.console_host),
+                    'node_name': or_none(cluster_info.node_name),
+                },
+                'org': or_none(ctx.org) if ctx is not Missing else None,
+                'promote': or_none(ctx.promote) if ctx is not Missing else None,
+                'repo': or_none(ctx.repo) if ctx is not Missing else None,
+                'targets': targets_list,
+                'variant': or_none(ctx.variant) if ctx is not Missing else None,
+                'timestamp': to_ts(insight.timestamp),
+            }
+        else:
+            record['tpi_configuration'] = None
+    except Exception as e:
+        warnings.append(f'Error parsing tpi_configuration: {e}')
+        record['tpi_configuration'] = None
+
+    # tpi_lease_credentials (single occurrence)
+    try:
+        if 'lease_credentials' in insights_by_name:
+            insight = insights_by_name['lease_credentials'][0]
+            ctx = insight.additional_context
+            record['tpi_lease_credentials'] = {
+                'lease_server': or_none(ctx.lease_server) if ctx is not Missing else None,
+                'username': or_none(ctx.username) if ctx is not Missing else None,
+                'timestamp': to_ts(insight.timestamp),
+            }
+        else:
+            record['tpi_lease_credentials'] = None
+    except Exception as e:
+        warnings.append(f'Error parsing tpi_lease_credentials: {e}')
+        record['tpi_lease_credentials'] = None
+
+    # tpi_execution_started
+    try:
+        if 'execution_started' in insights_by_name:
+            insight = insights_by_name['execution_started'][0]
+            ctx = insight.additional_context
+            record['tpi_execution_started'] = {
+                'started_after': or_none(ctx.started_after) if ctx is not Missing else None,
+                'timestamp': to_ts(insight.timestamp),
+            }
+        else:
+            record['tpi_execution_started'] = None
+    except Exception as e:
+        warnings.append(f'Error parsing tpi_execution_started: {e}')
+        record['tpi_execution_started'] = None
+
+    # tpi_execution_completed
+    try:
+        if 'execution_completed' in insights_by_name:
+            insight = insights_by_name['execution_completed'][0]
+            ctx = insight.additional_context
+            record['tpi_execution_completed'] = {
+                'duration_seconds': or_none(ctx.duration_seconds) if ctx is not Missing else None,
+                'success': or_none(ctx.success) if ctx is not Missing else None,
+                'error_count': or_none(ctx.error_count) if ctx is not Missing else None,
+                'timestamp': to_ts(insight.timestamp),
+            }
+        else:
+            record['tpi_execution_completed'] = None
+    except Exception as e:
+        warnings.append(f'Error parsing tpi_execution_completed: {e}')
+        record['tpi_execution_completed'] = None
+
+    # tpi_namespace_artifacts (single occurrence)
+    try:
+        if 'namespace_artifacts' in insights_by_name:
+            insight = insights_by_name['namespace_artifacts'][0]
+            ctx = insight.additional_context
+            record['tpi_namespace_artifacts'] = {
+                'namespace': or_none(ctx.namespace) if ctx is not Missing else None,
+                'timestamp': to_ts(insight.timestamp),
+            }
+        else:
+            record['tpi_namespace_artifacts'] = None
+    except Exception as e:
+        warnings.append(f'Error parsing tpi_namespace_artifacts: {e}')
+        record['tpi_namespace_artifacts'] = None
+
+    # tpi_lease_released (single occurrence)
+    try:
+        if 'lease_released' in insights_by_name:
+            insight = insights_by_name['lease_released'][0]
+            ctx = insight.additional_context
+            record['tpi_lease_released'] = {
+                'released_count': or_none(ctx.released_count) if ctx is not Missing else None,
+                'timestamp': to_ts(insight.timestamp),
+            }
+        else:
+            record['tpi_lease_released'] = None
+    except Exception as e:
+        warnings.append(f'Error parsing tpi_lease_released: {e}')
+        record['tpi_lease_released'] = None
+
+    # tpi_step_started (multiple occurrences)
+    try:
+        steps_started = []
+        if 'step_started' in insights_by_name:
+            for insight in insights_by_name['step_started']:
+                ctx = insight.additional_context
+                steps_started.append({
+                    'step_name': or_none(ctx.step_name) if ctx is not Missing else None,
+                    'description': or_none(ctx.description) if ctx is not Missing else None,
+                    'timestamp': to_ts(insight.timestamp),
+                })
+        record['tpi_step_started'] = steps_started
+    except Exception as e:
+        warnings.append(f'Error parsing tpi_step_started: {e}')
+        record['tpi_step_started'] = []
+
+    # tpi_step_completed (multiple occurrences)
+    try:
+        steps_completed = []
+        if 'step_completed' in insights_by_name:
+            for insight in insights_by_name['step_completed']:
+                ctx = insight.additional_context
+                steps_completed.append({
+                    'step_name': or_none(ctx.step_name) if ctx is not Missing else None,
+                    'description': or_none(ctx.description) if ctx is not Missing else None,
+                    'duration_seconds': or_none(ctx.duration_seconds) if ctx is not Missing else None,
+                    'success': or_none(ctx.success) if ctx is not Missing else None,
+                    'timestamp': to_ts(insight.timestamp),
+                })
+        record['tpi_step_completed'] = steps_completed
+    except Exception as e:
+        warnings.append(f'Error parsing tpi_step_completed: {e}')
+        record['tpi_step_completed'] = []
+
+    # Parse openshift_builds
+    try:
+        builds = []
+        if metrics.openshift_builds and metrics.openshift_builds is not Missing:
+            for build in metrics.openshift_builds:
+                # JSON fields must be serialized to strings for BigQuery
+                additional_context_json = None
+                if build.additional_context is not Missing:
+                    additional_context_json = json.dumps(build.additional_context.primitive())
+                
+                builds.append({
+                    'namespace': or_none(build.namespace),
+                    'name': or_none(build.name),
+                    'start_time': to_ts(build.start_time),
+                    'completion_time': to_ts(build.completion_time),
+                    'duration_seconds': or_none(build.duration_seconds),
+                    'status': or_none(build.status),
+                    'reason': or_none(build.reason),
+                    'output_image': or_none(build.output_image),
+                    'for_image': or_none(build.for_image),
+                    'additional_context': additional_context_json,
+                    'timestamp': to_ts(build.timestamp),
+                })
+        record['openshift_builds'] = builds
+    except Exception as e:
+        warnings.append(f'Error parsing openshift_builds: {e}')
+        record['openshift_builds'] = []
+
+    # Parse images
+    try:
+        images_list = []
+        if metrics.images and metrics.images is not Missing:
+            for image in metrics.images:
+                # JSON fields must be serialized to strings for BigQuery
+                image_stream_details_json = None
+                if image.image_stream_details is not Missing:
+                    image_stream_details_json = json.dumps(image.image_stream_details.primitive())
+                
+                additional_context_json = None
+                if image.additional_context is not Missing:
+                    additional_context_json = json.dumps(image.additional_context.primitive())
+                
+                images_list.append({
+                    'namespace': or_none(image.namespace),
+                    'image_stream_name': or_none(image.image_stream_name),
+                    'full_name': or_none(image.full_name),
+                    'success': or_none(image.success),
+                    'error': or_none(image.error),
+                    'image_stream_details': image_stream_details_json,
+                    'tag_name': or_none(image.tag_name),
+                    'full_tag_name': or_none(image.full_tag_name),
+                    'source_image': or_none(image.source_image),
+                    'source_image_kind': or_none(image.source_image_kind),
+                    'start_time': to_ts(image.start_time),
+                    'completion_time': to_ts(image.completion_time),
+                    'duration_seconds': or_none(image.duration_seconds),
+                    'retry_count': or_none(image.retry_count),
+                    'additional_context': additional_context_json,
+                    'timestamp': to_ts(image.timestamp),
+                })
+        record['images'] = images_list
+    except Exception as e:
+        warnings.append(f'Error parsing images: {e}')
+        record['images'] = []
+
+    # Parse leases
+    try:
+        leases_list = []
+        if metrics.leases and metrics.leases is not Missing:
+            for lease in metrics.leases:
+                leases_list.append({
+                    'name': or_none(lease.name),
+                    'slice': or_none(lease.slice),
+                    'region': or_none(lease.region),
+                    'raw_lease_name': or_none(lease.raw_lease_name),
+                    'acquisition_duration_seconds': or_none(lease.acquisition_duration_seconds),
+                    'leases_remaining_at_acquisition': or_none(lease.leases_remaining_at_acquisition),
+                    'leases_total': or_none(lease.leases_total),
+                    'timestamp': to_ts(lease.timestamp),
+                })
+        record['leases'] = leases_list
+    except Exception as e:
+        warnings.append(f'Error parsing leases: {e}')
+        record['leases'] = []
+
+    # Parse nodes
+    try:
+        nodes_list = []
+        if metrics.nodes and metrics.nodes is not Missing:
+            for node in metrics.nodes:
+                resources = node.resources if node.resources is not Missing else Model()
+                capacity = resources.capacity if resources.capacity is not Missing else Model()
+                allocatable = resources.allocatable if resources.allocatable is not Missing else Model()
+                usage_stats = node.usage_stats if node.usage_stats is not Missing else Model()
+                watch_history = []
+                if node.watch_history and node.watch_history is not Missing:
+                    for period in node.watch_history:
+                        watch_history.append({
+                            'start_time': to_ts(period.start_time),
+                            'end_time': to_ts(period.end_time),
+                        })
+                workloads = []
+                if node.workloads and node.workloads is not Missing:
+                    workloads = list(node.workloads.primitive())
+                
+                # JSON fields must be serialized to strings for BigQuery
+                labels_json = None
+                ci_workload = None
+                if node.labels is not Missing:
+                    labels_primitive = node.labels.primitive()
+                    labels_json = json.dumps(labels_primitive)
+                    # Extract ci-workload label as a promoted field for easier querying
+                    ci_workload = labels_primitive.get('ci-workload')
+                
+                nodes_list.append({
+                    'node': or_none(node.node),
+                    'arch': or_none(node.arch),
+                    'machine_type': or_none(node.machine_type),
+                    'machine_id': or_none(node.machine_id),
+                    'age_seconds': or_none(node.age_seconds),
+                    'ci_workload': ci_workload,
+                    'resources': {
+                        'capacity': {
+                            'cpu': or_none(capacity.cpu),
+                            'memory': or_none(capacity.memory),
+                            'ephemeral_storage': or_none(capacity['ephemeral-storage']),
+                            'pods': or_none(capacity.pods),
+                        },
+                        'allocatable': {
+                            'cpu': or_none(allocatable.cpu),
+                            'memory': or_none(allocatable.memory),
+                            'ephemeral_storage': or_none(allocatable['ephemeral-storage']),
+                            'pods': or_none(allocatable.pods),
+                        },
+                    },
+                    'usage_stats': {
+                        'min_cpu_milli': or_none(usage_stats.min_cpu_milli),
+                        'max_cpu_milli': or_none(usage_stats.max_cpu_milli),
+                        'avg_cpu_milli': or_none(usage_stats.avg_cpu_milli),
+                        'min_memory_bytes': or_none(usage_stats.min_memory_bytes),
+                        'max_memory_bytes': or_none(usage_stats.max_memory_bytes),
+                        'avg_memory_bytes': or_none(usage_stats.avg_memory_bytes),
+                    },
+                    'labels': labels_json,
+                    'timestamp': to_ts(node.timestamp),
+                    'poll_started': to_ts(node.poll_started),
+                    'workloads': workloads,
+                    'watch_history': watch_history,
+                })
+        record['nodes'] = nodes_list
+    except Exception as e:
+        warnings.append(f'Error parsing nodes: {e}')
+        record['nodes'] = []
+
+    # Parse pods
+    try:
+        pods_list = []
+        if metrics.pods and metrics.pods is not Missing:
+            for pod in metrics.pods:
+                # JSON fields must be serialized to strings for BigQuery
+                condition_transition_times_json = None
+                if pod.condition_transition_times is not Missing:
+                    condition_transition_times_json = json.dumps(pod.condition_transition_times.primitive())
+                
+                pods_list.append({
+                    'pod_name': or_none(pod.pod_name),
+                    'namespace': or_none(pod.namespace),
+                    'creation_time': to_ts(pod.creation_time),
+                    'start_time': to_ts(pod.start_time),
+                    'completion_time': to_ts(pod.completion_time),
+                    'condition_transition_times': condition_transition_times_json,
+                    'scheduling_latency': or_none(pod.scheduling_latency),
+                    'initialization_latency': or_none(pod.initialization_latency),
+                    'ready_latency': or_none(pod.ready_latency),
+                    'completion_latency': or_none(pod.completion_latency),
+                    'pod_phase': or_none(pod.pod_phase),
+                    'init_container_restarts': or_none(pod.init_container_restarts),
+                    'init_container_last_error': or_none(pod.init_container_last_error),
+                    'timestamp': to_ts(pod.timestamp),
+                })
+        record['pods'] = pods_list
+    except Exception as e:
+        warnings.append(f'Error parsing pods: {e}')
+        record['pods'] = []
+
+    # Log any warnings
+    if warnings:
+        print(f'Warnings while parsing ci-operator-metrics.json for {prowjob_build_id}:')
+        for warning in warnings:
+            print(f'  - {warning}')
+
+    return record
 
 
 class SimpleErrorHandler(sax.handler.ErrorHandler):
@@ -940,6 +1491,29 @@ def parse_releaseinfo_from_gcs(prowjob_name: str, prowjob_build_id: str, file_pa
     return parse_releaseinfo_json(prowjob_name, prowjob_build_id, releaseinfo_json_text, is_pr=is_pr)
 
 
+def parse_ci_operator_metrics_from_gcs(prowjob_name: str, prowjob_build_id: str, file_path: str) -> Optional[Dict]:
+    """Read and parse ci-operator-metrics.json from GCS."""
+    try:
+        b = global_result_storage_bucket_client.get_blob(file_path)
+        if not b:
+            # File doesn't exist - this is normal for older prowjobs
+            return None
+        
+        if b.size is not None and b.size == 0:
+            print(f'Empty ci-operator-metrics.json file: {file_path}')
+            return None
+        
+        blob_created_at = b.time_created
+        if not blob_created_at:
+            blob_created_at = datetime.datetime.now()
+        
+        metrics_json_text = b.download_as_text()
+        return parse_ci_operator_metrics_json(prowjob_name, prowjob_build_id, metrics_json_text, file_path, blob_created_at)
+    except Exception as e:
+        print(f'Error reading ci-operator-metrics.json from GCS: {file_path}: {e}')
+        return None
+
+
 def parse_junit_from_gcs(prowjob_name: str, prowjob_build_id: str, file_path: str) -> Optional[List[Dict]]:
 
     if file_path.endswith('junit_operator.xml'):
@@ -1110,6 +1684,41 @@ def process_releaseinfo_from_gcs_file_path(file_path: str):
         raise IOError("Encountered errors while inserting release info rows")
 
 
+def parse_ci_operator_metrics_from_gcs_file_path(file_path: str) -> Optional[Dict]:
+    """Parse ci-operator-metrics.json from a GCS file path."""
+    try:
+        prowjob_path_matcher = prowjob_path_pattern.match(file_path)
+        if prowjob_path_matcher:
+            prowjob_name = prowjob_path_matcher.group(2)
+            prowjob_build_id = prowjob_path_matcher.group(3)
+            return parse_ci_operator_metrics_from_gcs(prowjob_name=prowjob_name, prowjob_build_id=prowjob_build_id, file_path=file_path)
+    except Exception as e:
+        print(f'\n\nError while processing ci-operator-metrics: {file_path}')
+        traceback.print_exc()
+    return None
+
+
+def process_ci_operator_metrics_from_gcs_file_path(file_path: str):
+    """Process and insert ci-operator-metrics.json into BigQuery."""
+    record_dict = parse_ci_operator_metrics_from_gcs_file_path(file_path)
+    if not record_dict:
+        return
+    bq = global_bq_client
+    errors = bq.insert_rows_json(global_bucket_info.table_id_ci_operator_metrics, [record_dict])
+    if errors == []:
+        print(f"New ci-operator-metrics row added for {record_dict.get('prowjob_build_id', 'unknown')}")
+    else:
+        print(f"Encountered errors while inserting ci-operator-metrics rows ({file_path}):")
+        print(f"  Full errors: {errors}")
+        print(f"  Record keys: {list(record_dict.keys())}")
+        if errors and len(errors) > 0:
+            print(f"  First error details: {errors[0]}")
+            if 'errors' in errors[0]:
+                for err in errors[0]['errors']:
+                    print(f"    - {err}")
+        raise IOError(f"Encountered errors while inserting ci-operator-metrics rows: {errors[0] if errors else 'unknown'}")
+
+
 def process_prowjob_from_gcs(file_path: str, bkt: str):
     record_dict = parse_prowjob_from_gcs(file_path, bkt)
     if not record_dict:
@@ -1169,6 +1778,9 @@ def gcs_finalize(event, context):
     elif gcs_file_name.endswith('/releaseinfo.json'):
         process_connection_setup(bucket=bucket)
         process_releaseinfo_from_gcs_file_path(gcs_file_name)
+    elif gcs_file_name.endswith('/ci-operator-metrics.json'):
+        process_connection_setup(bucket=bucket)
+        process_ci_operator_metrics_from_gcs_file_path(gcs_file_name)
     #elif 'e2e-timelines_everything_' in gcs_file_name and gcs_file_name.endswith('.json'):
     #    process_connection_setup(bucket=bucket)
     #    process_job_intervals_from_gcs_file_path(gcs_file_name)
@@ -1187,6 +1799,46 @@ def ci_process_queue(input_queue):
 
     for event in iter(input_queue.get, 'STOP'):
         gcs_finalize(event, None)
+
+
+def ci_operator_metrics_process_queue(input_queue):
+    """Worker process for cold loading ci-operator-metrics.json files."""
+    processed_count = 0
+    success_count = 0
+    not_found_count = 0
+    error_count = 0
+    
+    for event in iter(input_queue.get, 'STOP'):
+        bucket_name = event['bucket_name']
+        process_connection_setup(bucket_name)
+        file_path = event['file_path']
+        
+        try:
+            record_dict = parse_ci_operator_metrics_from_gcs_file_path(file_path)
+            if record_dict:
+                bq = global_bq_client
+                errors = bq.insert_rows_json(global_bucket_info.table_id_ci_operator_metrics, [record_dict])
+                if errors == []:
+                    success_count += 1
+                    if success_count % 10 == 0:
+                        print(f"Worker {os.getpid()}: Successfully inserted {success_count} records (not found: {not_found_count}, errors: {error_count})")
+                else:
+                    error_count += 1
+                    print(f"Worker {os.getpid()}: BigQuery insert error for {file_path}: {errors[0]}")
+            else:
+                not_found_count += 1
+            
+            processed_count += 1
+            if processed_count % 50 == 0:
+                print(f"Worker {os.getpid()}: Processed {processed_count} files (success: {success_count}, not found: {not_found_count}, errors: {error_count})")
+                
+        except Exception as e:
+            error_count += 1
+            # Log but don't crash - some files may not exist or be malformed
+            if error_count <= 5:  # Only print first few errors in detail
+                print(f'Worker {os.getpid()}: Failed to process {file_path}: {e}')
+    
+    print(f"Worker {os.getpid()} FINAL: Processed {processed_count} files (success: {success_count}, not found: {not_found_count}, errors: {error_count})")
 
 
 def cold_load_qe():
@@ -1912,6 +2564,123 @@ def ci_operator_load_time_process_queue(input_queue):
     insert_available_rows()
 
 
+def cold_load_ci_operator_metrics(bucket_name):
+    """
+    Cold load ci-operator-metrics.json files from GCS for prowjobs that don't have metrics yet.
+    This function queries the jobs table for prowjobs without ci-operator-metrics entries,
+    then downloads and processes their ci-operator-metrics.json files in parallel.
+    
+    Usage:
+        cold_load_ci_operator_metrics('test-platform-results')
+    
+    The function will:
+    1. Query jobs table for prowjobs without ci-operator-metrics (last 6 months)
+    2. Convert prowjob URLs to GCS paths (e.g., .../artifacts/ci-operator-metrics.json)
+    3. Process files in parallel using multiple worker processes
+    4. Handle missing files gracefully (older prowjobs may not have this file)
+    5. Continue on errors to maximize data ingestion
+    
+    Set debug_mode=False to process all historical data (may take hours).
+    """
+    process_connection_setup(bucket_name)
+
+    query_relevant_storage_paths = f"""
+    SELECT 
+        jobs.prowjob_url AS prowjob_url,
+        jobs.prowjob_build_id AS prowjob_build_id,
+        jobs.prowjob_start AS prowjob_start
+    FROM 
+        `{global_bucket_info.table_id_jobs}` AS jobs
+    WHERE
+        jobs.prowjob_start > DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 6 MONTH)  # GCS stores 6 months of data
+        AND jobs.prowjob_state = 'success'  # Only completed jobs
+        AND jobs.prowjob_completion IS NOT NULL  # Must have completed
+        AND LENGTH(jobs.prowjob_job_name) > 30  # Filter out short cleanup jobs, focus on actual test runs
+        AND
+        jobs.prowjob_build_id NOT IN (
+            SELECT prowjob_build_id
+            FROM `{global_bucket_info.table_id_ci_operator_metrics}`
+            WHERE schema_level = {CI_OPERATOR_METRICS_SCHEMA_LEVEL}
+        )
+    GROUP BY jobs.prowjob_url, jobs.prowjob_build_id, jobs.prowjob_start
+    ORDER BY jobs.prowjob_start DESC
+    """
+
+    # Enable processing a small number of jobs for testing
+    debug_mode = False
+    max_jobs_to_process = 100  # Start small to test older format
+    show_sample_urls = True  # Show first few URLs being processed
+
+    print(f"Querying for prowjobs without ci-operator-metrics entries...")
+    prowjob_urls = global_bq_client.query(query_relevant_storage_paths)
+
+    # Debug mode: limit to small number for testing
+    if debug_mode:
+        print(f"DEBUG MODE: Processing only first {max_jobs_to_process} jobs")
+        prowjob_urls = list(prowjob_urls)[:max_jobs_to_process]
+        
+        if show_sample_urls and len(prowjob_urls) > 0:
+            print(f"\nSample prowjob URLs being processed:")
+            for i, record in enumerate(prowjob_urls[:5]):
+                print(f"  {i+1}. URL: {record['prowjob_url']}")
+                print(f"     Build ID: {record['prowjob_build_id']}")
+                print(f"     Start: {record['prowjob_start']}")
+    
+    queue = multiprocessing.Queue(os.cpu_count() * 1000)
+    workers_per_cpu = 3  # Number of processes per CPU
+    
+    if debug_mode:
+        worker_pool = [multiprocessing.Process(target=ci_operator_metrics_process_queue, args=(queue,)) for _ in range(2)]  # Just 2 workers for testing
+    else:
+        worker_pool = [multiprocessing.Process(target=ci_operator_metrics_process_queue, args=(queue,)) for _ in range(workers_per_cpu * os.cpu_count())]
+    
+    for worker in worker_pool:
+        worker.start()
+
+    prowjob_url_bucket_prefix = global_bucket_info.bucket_url_prefix
+
+    object_count = 0
+    skipped_count = 0
+    
+    for record in prowjob_urls:
+        prowjob_url: str = record['prowjob_url']
+        if not prowjob_url:
+            continue
+
+        if not prowjob_url.startswith(prowjob_url_bucket_prefix):
+            skipped_count += 1
+            continue
+
+        prowjob_url = prowjob_url.rstrip('/')
+        # Convert prowjob URL to bucket path
+        # Example: https://prow.ci.openshift.org/view/gs/test-platform-results/logs/periodic-ci-Azure-ARO-HCP-main-periodic-create-aro-hcp-in-integration/1986222021096247296
+        # Becomes: logs/periodic-ci-Azure-ARO-HCP-main-periodic-create-aro-hcp-in-integration/1986222021096247296
+        bucket_path_to_job_files = prowjob_url[len(prowjob_url_bucket_prefix):]
+        ci_operator_metrics_path = f'{bucket_path_to_job_files}/artifacts/ci-operator-metrics.json'
+        
+        event = {
+            'bucket_name': bucket_name,
+            'file_path': ci_operator_metrics_path,
+        }
+        queue.put(event)
+        object_count += 1
+        
+        if object_count % 1000 == 0:
+            print(f'Prowjob ci-operator-metrics queued so far: {object_count} (skipped: {skipped_count})')
+
+    print(f'Total prowjobs queued: {object_count} (skipped: {skipped_count})')
+    
+    # Signal workers to stop
+    for _ in worker_pool:
+        queue.put('STOP')
+
+    # Wait for all workers to complete
+    for worker in worker_pool:
+        worker.join()
+    
+    print(f'Cold load complete. Processed {object_count} prowjobs.')
+
+
 def analyze_ci_operator_pull_secret_load_time(bucket_name):
     process_connection_setup(bucket_name)
 
@@ -2001,15 +2770,18 @@ if __name__ == '__main__':
     #parse_junit_from_gcs_file_path('logs/periodic-ci-openshift-release-master-ci-4.14-e2e-gcp-sdn/1640905778267164672/artifacts/e2e-gcp-sdn/openshift-e2e-test/artifacts/junit/junit_e2e__20230329-031207.xml')
 
     #cold_load_build_log_txt('test-platform-results')
+    
+    # Cold load ci-operator-metrics.json files from historical prowjobs
+    cold_load_ci_operator_metrics('test-platform-results')
 
-    import requests
-    url = "https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/logs/periodic-ci-openshift-release-master-konflux-nightly-4.19-e2e-aws-ovn-upgrade/1912429868163796992/artifacts/e2e-aws-ovn-upgrade/openshift-e2e-test/artifacts/junit/junit_e2e__20250416-112104.xml"
+    # import requests
+    # url = "https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/logs/periodic-ci-openshift-release-master-konflux-nightly-4.19-e2e-aws-ovn-upgrade/1912429868163796992/artifacts/e2e-aws-ovn-upgrade/openshift-e2e-test/artifacts/junit/junit_e2e__20250416-112104.xml"
 
-    response = requests.get(url)
-    response.raise_for_status()  # Raises HTTPError for bad responses
+    # response = requests.get(url)
+    # response.raise_for_status()  # Raises HTTPError for bad responses
 
-    xml_content = response.text  # This will be a UTF-8 decoded string
-    parse_junit_xml(xml_content, "test", "test", "test", "test")
+    # xml_content = response.text  # This will be a UTF-8 decoded string
+    # parse_junit_xml(xml_content, "test", "test", "test", "test")
 
     #process_releaseinfo_from_gcs_file_path('pr-logs/pull/openshift_release/40864/rehearse-40864-pull-ci-openshift-cluster-api-release-4.11-e2e-aws/1675182964247367680/artifacts/e2e-aws/gather-extra/artifacts/releaseinfo.json')
     #cold_load_junit()
