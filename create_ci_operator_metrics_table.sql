@@ -6,7 +6,7 @@
 -- - 'events' array for step-level execution tracking with structured event data
 -- - Field descriptions added via OPTIONS for fields with clear semantics
 -- - Partitioned by date for efficient querying
--- - Clustered by prowjob_build_id and prowjob_job_name for fast lookups
+-- - Clustered by prowjob_job_name and prowjob_build_id for optimal query performance
 -- - Raw test_platform_insights array preserved alongside promoted tpi_* fields for flexibility
 -- - Resilient parsing: handles missing fields and schema evolution gracefully
 
@@ -212,7 +212,7 @@ CREATE OR REPLACE TABLE `openshift-gce-devel.ci_analysis_us.ci_operator_metrics`
     arch STRING,
     machine_type STRING,
     machine_id STRING,
-    age_seconds STRING,
+    age_seconds INT64 OPTIONS(description="Node age in seconds (current time minus node creation timestamp)"),
     ci_workload STRING OPTIONS(description="CI workload type from labels['ci-workload'] (e.g., 'builds', 'tests')"),
     resources STRUCT<
       capacity STRUCT<
@@ -265,7 +265,7 @@ CREATE OR REPLACE TABLE `openshift-gce-devel.ci_analysis_us.ci_operator_metrics`
   >> OPTIONS(description="Pod lifecycle events and performance metrics tracking pod scheduling, initialization, and execution")
 )
 PARTITION BY DATE(created)
-CLUSTER BY prowjob_build_id, prowjob_job_name
+CLUSTER BY prowjob_job_name, prowjob_build_id
 OPTIONS(
   description="CI Operator metrics data from ci-operator-metrics.json files, including step-level events, build, image, pod, node, lease, and platform insights",
   require_partition_filter=false
@@ -273,7 +273,7 @@ OPTIONS(
 
 -- Create indexes for common query patterns
 -- Note: BigQuery doesn't have traditional indexes, but clustering serves a similar purpose
--- The table is already clustered by prowjob_build_id and prowjob_job_name
+-- The table is clustered by prowjob_job_name and prowjob_build_id for optimal performance on job-based queries
 
 -- Example queries:
 
@@ -706,7 +706,7 @@ CREATE OR REPLACE TABLE `openshift-gce-devel.ci_analysis_qe.ci_operator_metrics`
     arch STRING,
     machine_type STRING,
     machine_id STRING,
-    age_seconds STRING,
+    age_seconds INT64 OPTIONS(description="Node age in seconds (current time minus node creation timestamp)"),
     ci_workload STRING OPTIONS(description="CI workload type from labels['ci-workload'] (e.g., 'builds', 'tests')"),
     resources STRUCT<
       capacity STRUCT<
@@ -759,7 +759,7 @@ CREATE OR REPLACE TABLE `openshift-gce-devel.ci_analysis_qe.ci_operator_metrics`
   >>
 )
 PARTITION BY DATE(created)
-CLUSTER BY prowjob_build_id, prowjob_job_name
+CLUSTER BY prowjob_job_name, prowjob_build_id
 OPTIONS(
   description="CI Operator metrics data from ci-operator-metrics.json files (QE dataset)",
   require_partition_filter=false
@@ -938,7 +938,7 @@ CREATE OR REPLACE TABLE `openshift-gce-devel.ci_analysis_private.ci_operator_met
     arch STRING,
     machine_type STRING,
     machine_id STRING,
-    age_seconds STRING,
+    age_seconds INT64 OPTIONS(description="Node age in seconds (current time minus node creation timestamp)"),
     ci_workload STRING OPTIONS(description="CI workload type from labels['ci-workload'] (e.g., 'builds', 'tests')"),
     resources STRUCT<
       capacity STRUCT<
@@ -991,7 +991,7 @@ CREATE OR REPLACE TABLE `openshift-gce-devel.ci_analysis_private.ci_operator_met
   >>
 )
 PARTITION BY DATE(created)
-CLUSTER BY prowjob_build_id, prowjob_job_name
+CLUSTER BY prowjob_job_name, prowjob_build_id
 OPTIONS(
   description="CI Operator metrics data from ci-operator-metrics.json files (Private dataset)",
   require_partition_filter=false

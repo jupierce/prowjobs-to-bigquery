@@ -954,12 +954,20 @@ def parse_ci_operator_metrics_json(prowjob_name: str, prowjob_build_id: str, met
                     # Extract ci-workload label as a promoted field for easier querying
                     ci_workload = labels_primitive.get('ci-workload')
                 
+                # Convert age_seconds to integer if present
+                age_seconds = None
+                if node.age_seconds is not Missing and node.age_seconds is not None:
+                    try:
+                        age_seconds = int(node.age_seconds) if isinstance(node.age_seconds, str) else node.age_seconds
+                    except (ValueError, TypeError):
+                        age_seconds = None
+                
                 nodes_list.append({
                     'node': or_none(node.node),
                     'arch': or_none(node.arch),
                     'machine_type': or_none(node.machine_type),
                     'machine_id': or_none(node.machine_id),
-                    'age_seconds': or_none(node.age_seconds),
+                    'age_seconds': age_seconds,
                     'ci_workload': ci_workload,
                     'resources': {
                         'capacity': {
